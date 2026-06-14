@@ -2480,12 +2480,12 @@
 				background_tasks: {
 					...(!$temporaryChatEnabled && !_chatId && (userMessage?.parentId ?? null) === null
 						? {
-								title_generation: $settings?.title?.auto ?? true,
-								tags_generation: $settings?.autoTags ?? true
-							}
-						: {}),
-					follow_up_generation: $settings?.autoFollowUps ?? true
-				},
+									title_generation: $settings?.title?.auto ?? true,
+									tags_generation: $settings?.autoTags ?? false
+								}
+							: {}),
+						follow_up_generation: $settings?.autoFollowUps ?? false
+					},
 
 				...(stream && (model.info?.meta?.capabilities?.usage ?? false)
 					? {

@@ -2,6 +2,7 @@
 	import { toast } from 'svelte-sonner';
 	import { createEventDispatcher, onMount, getContext } from 'svelte';
 	import { getToolServersData } from '$lib/apis';
+	import { APP_NAME } from '$lib/constants';
 
 	const dispatch = createEventDispatcher();
 	const i18n = getContext('i18n');
@@ -121,9 +122,7 @@
 						>
 							{$i18n.t('Connect to your own OpenAPI compatible external tool servers.')}
 							<br />
-							{$i18n.t(
-								'CORS must be properly configured by the provider to allow requests from Open WebUI.'
-							)}
+							{`CORS must be properly configured by the provider to allow requests from ${APP_NAME}.`}
 						</div>
 					</div>
 

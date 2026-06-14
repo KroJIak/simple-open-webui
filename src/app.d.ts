@@ -7,6 +7,10 @@ declare global {
 		// interface PageData {}
 		// interface Platform {}
 	}
+
+	interface Window {
+		__WEBUI_NAME__?: string;
+	}
 }
 
 export {};

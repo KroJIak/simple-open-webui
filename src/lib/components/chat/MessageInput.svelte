@@ -1475,7 +1475,7 @@
 															navigator.msMaxTouchPoints > 0
 														)}
 													placeholder={placeholder ? placeholder : $i18n.t('Send a Message')}
-													largeTextAsFile={($settings?.largeTextAsFile ?? false) && !shiftKey}
+													largeTextAsFile={($settings?.largeTextAsFile ?? true) && !shiftKey}
 													autocomplete={$config?.features?.enable_autocomplete_generation &&
 														($settings?.promptAutocomplete ?? false)}
 													generateAutoCompletion={async (text) => {
@@ -1584,7 +1584,7 @@
 														if (clipboardData && clipboardData.items) {
 															for (const item of clipboardData.items) {
 																if (item.type === 'text/plain') {
-																	if (($settings?.largeTextAsFile ?? false) && !shiftKey) {
+																	if (($settings?.largeTextAsFile ?? true) && !shiftKey) {
 																		const text = clipboardData.getData('text/plain');
 
 																		if (text.length > PASTED_TEXT_CHARACTER_LIMIT) {

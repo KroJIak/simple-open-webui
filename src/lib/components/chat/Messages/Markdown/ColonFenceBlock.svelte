@@ -26,7 +26,7 @@
 
 	const copyText = async () => {
 		copied = true;
-		await copyToClipboard(token.text, null, $settings?.copyFormatted ?? false);
+		await copyToClipboard(token.text, null, $settings?.copyFormatted ?? true);
 		setTimeout(() => {
 			copied = false;
 		}, 1000);

@@ -31,6 +31,7 @@ from open_webui.env import (
     ENABLE_OPENAI_API_PASSTHROUGH,
     FORWARD_SESSION_INFO_HEADER_CHAT_ID,
     MODELS_CACHE_TTL,
+    WEBUI_NAME,
 )
 from open_webui.internal.db import get_async_session
 from open_webui.models.access_grants import AccessGrants
@@ -161,7 +162,7 @@ async def get_headers_and_cookies(
         **(
             {
                 'HTTP-Referer': 'https://openwebui.com/',
-                'X-Title': 'Open WebUI',
+                'X-Title': WEBUI_NAME,
             }
             if 'openrouter.ai' in url
             else {}
@@ -352,7 +353,7 @@ async def speech(request: Request, user=Depends(get_verified_user)):
 
             raise HTTPException(
                 status_code=r.status if r else 500,
-                detail=detail if detail else 'Open WebUI: Server Connection Error',
+                detail=detail if detail else str(ERROR_MESSAGES.SERVER_CONNECTION_ERROR),
             )
 
     except ValueError:
@@ -644,7 +645,7 @@ async def get_models(request: Request, url_idx: int | None = None, user=Depends(
             except aiohttp.ClientError as e:
                 # ClientError covers all aiohttp requests issues
                 log.exception(f'Client error: {str(e)}')
-                raise HTTPException(status_code=500, detail='Open WebUI: Server Connection Error')
+                raise HTTPException(status_code=500, detail=str(ERROR_MESSAGES.SERVER_CONNECTION_ERROR))
             except Exception as e:
                 log.exception(f'Unexpected error: {e}')
                 error_detail = f'Unexpected error: {str(e)}'
@@ -1612,7 +1613,7 @@ async def proxy(path: str, request: Request, user=Depends(get_verified_user)):
         log.exception(e)
         raise HTTPException(
             status_code=r.status if r else 500,
-            detail='Open WebUI: Server Connection Error',
+            detail=str(ERROR_MESSAGES.SERVER_CONNECTION_ERROR),
         )
     finally:
         if not streaming:

@@ -33,7 +33,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from redis import Redis
@@ -597,7 +597,19 @@ log = logging.getLogger(__name__)
 
 
 class SPAStaticFiles(StaticFiles):
+    async def get_index_response(self, scope):
+        app_name = getattr(getattr(scope.get('app', None), 'state', None), 'WEBUI_NAME', WEBUI_NAME)
+
+        with open(os.path.join(self.directory, 'index.html'), 'r', encoding='utf-8') as f:
+            html = f.read()
+
+        html = html.replace('__WEBUI_NAME_JSON__', json.dumps(app_name).replace('</', '<\\/'))
+        return HTMLResponse(html)
+
     async def get_response(self, path: str, scope):
+        if path in ('', '/', 'index.html'):
+            return await self.get_index_response(scope)
+
         try:
             return await super().get_response(path, scope)
         except (HTTPException, StarletteHTTPException) as ex:
@@ -606,7 +618,7 @@ class SPAStaticFiles(StaticFiles):
                     # Return 404 for javascript files
                     raise ex
                 else:
-                    return await super().get_response('index.html', scope)
+                    return await self.get_index_response(scope)
             else:
                 raise ex
 
@@ -629,7 +641,7 @@ https://github.com/open-webui/open-webui
         print(banner)
     except UnicodeEncodeError:
         # Stdout can't encode the box-drawing banner (Windows cp1252, redirected/headless stdout); fall back to ASCII.
-        print(f'Open WebUI v{VERSION} - building the best AI user interface.\nhttps://github.com/open-webui/open-webui')
+        print(f'{WEBUI_NAME} v{VERSION} - building the best AI user interface.\nhttps://github.com/open-webui/open-webui')
 
 
 @asynccontextmanager
@@ -747,7 +759,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title='Open WebUI',
+    title=WEBUI_NAME,
     docs_url='/docs' if ENV == 'dev' else None,
     openapi_url='/openapi.json' if ENV == 'dev' else None,
     redoc_url=None,

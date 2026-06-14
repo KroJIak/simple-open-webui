@@ -913,7 +913,7 @@
 													navigator.maxTouchPoints > 0 ||
 													navigator.msMaxTouchPoints > 0
 												)}
-											largeTextAsFile={$settings?.largeTextAsFile ?? false}
+											largeTextAsFile={$settings?.largeTextAsFile ?? true}
 											floatingMenuPlacement={'top-start'}
 											{suggestions}
 											onChange={(e) => {

@@ -115,7 +115,13 @@
 			})();
 		</script>
 
-		<title>Open WebUI</title>
+		<title></title>
+		<script>
+			window.__WEBUI_NAME__ = __WEBUI_NAME_JSON__;
+			if (window.__WEBUI_NAME__) {
+				document.title = window.__WEBUI_NAME__;
+			}
+		</script>
 
 		%sveltekit.head%
 	</head>

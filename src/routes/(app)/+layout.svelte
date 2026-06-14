@@ -316,7 +316,7 @@
 		};
 		setupKeyboardShortcuts();
 
-		if ($user?.role === 'admin' && ($settings?.showChangelog ?? true)) {
+		if ($user?.role === 'admin' && ($settings?.showChangelog ?? false)) {
 			showChangelog.set($settings?.version !== $config.version);
 		}
 

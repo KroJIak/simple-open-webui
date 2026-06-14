@@ -5,6 +5,7 @@
 
 	import { exportChatStats, exportSingleChatStats, downloadChatStats } from '$lib/apis/chats';
 	import { getVersion } from '$lib/apis';
+	import { APP_NAME } from '$lib/constants';
 
 	import Modal from '$lib/components/common/Modal.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -374,9 +375,7 @@
 				</div>
 
 				<div class="mt-2 text-xs text-gray-500">
-					{$i18n.t(
-						'Participate in community leaderboards and evaluations! Syncing aggregated usage stats helps drive research and improvements to Open WebUI. Your privacy is paramount: no message content is ever shared.'
-					)}
+					{`Participate in community leaderboards and evaluations! Syncing aggregated usage stats helps drive research and improvements to ${APP_NAME}. Your privacy is paramount: no message content is ever shared.`}
 				</div>
 
 				<div class="mt-3 text-xs text-gray-500">
@@ -384,7 +383,7 @@
 						{$i18n.t('What is shared:')}
 					</div>
 					<ul class="list-disc list-inside space-y-0.5 ml-1 mb-2">
-						<li>{$i18n.t('Open WebUI version')}</li>
+						<li>{`${APP_NAME} version`}</li>
 						<li>{$i18n.t('Model names and usage frequency')}</li>
 						<li>{$i18n.t('Message counts and response timestamps')}</li>
 						<li>{$i18n.t('Content lengths (character counts only)')}</li>

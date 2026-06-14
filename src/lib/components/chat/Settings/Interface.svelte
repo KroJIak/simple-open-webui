@@ -25,8 +25,8 @@
 
 	// Addons
 	let titleAutoGenerate = true;
-	let autoFollowUps = true;
-	let autoTags = true;
+	let autoFollowUps = false;
+	let autoTags = false;
 
 	let responseAutoCopy = false;
 	let widescreenMode = false;
@@ -51,7 +51,7 @@
 	let insertPromptAsRichText = false;
 	let promptAutocomplete = false;
 
-	let largeTextAsFile = false;
+	let largeTextAsFile = true;
 
 	let insertSuggestionPrompt = false;
 	let keepFollowUpPrompts = false;
@@ -64,7 +64,7 @@
 	let chatBubble = true;
 	let chatDirection: 'LTR' | 'RTL' | 'auto' = 'auto';
 	let ctrlEnterToSend = false;
-	let copyFormatted = false;
+	let copyFormatted = true;
 
 	let temporaryChatByDefault = false;
 	let chatFadeStreamingText = true;
@@ -90,10 +90,10 @@
 
 	// Admin - Show Update Available Toast
 	let showUpdateToast = true;
-	let showChangelog = true;
+	let showChangelog = false;
 
 	let showEmojiInCall = false;
-	let voiceInterruption = false;
+	let voiceInterruption = true;
 	let hapticFeedback = false;
 
 	let webSearch = null;
@@ -200,8 +200,8 @@
 
 	onMount(async () => {
 		titleAutoGenerate = $settings?.title?.auto ?? true;
-		autoTags = $settings?.autoTags ?? true;
-		autoFollowUps = $settings?.autoFollowUps ?? true;
+		autoTags = $settings?.autoTags ?? false;
+		autoFollowUps = $settings?.autoFollowUps ?? false;
 
 		highContrastMode = $settings?.highContrastMode ?? false;
 
@@ -210,10 +210,10 @@
 
 		showUsername = $settings?.showUsername ?? false;
 		showUpdateToast = $settings?.showUpdateToast ?? true;
-		showChangelog = $settings?.showChangelog ?? true;
+		showChangelog = $settings?.showChangelog ?? false;
 
 		showEmojiInCall = $settings?.showEmojiInCall ?? false;
-		voiceInterruption = $settings?.voiceInterruption ?? false;
+		voiceInterruption = $settings?.voiceInterruption ?? true;
 
 		displayMultiModelResponsesInTabs = $settings?.displayMultiModelResponsesInTabs ?? false;
 		chatFadeStreamingText = $settings?.chatFadeStreamingText ?? true;
@@ -230,8 +230,8 @@
 		regenerateMenu = $settings?.regenerateMenu ?? true;
 		enableMessageQueue = $settings?.enableMessageQueue ?? true;
 
-		largeTextAsFile = $settings?.largeTextAsFile ?? false;
-		copyFormatted = $settings?.copyFormatted ?? false;
+		largeTextAsFile = $settings?.largeTextAsFile ?? true;
+		copyFormatted = $settings?.copyFormatted ?? true;
 
 		collapseCodeBlocks = $settings?.collapseCodeBlocks ?? false;
 		renderMarkdownInUserMessages = $settings?.renderMarkdownInUserMessages ?? true;
