@@ -28,7 +28,7 @@ FROM --platform=$BUILDPLATFORM node:22-alpine3.20 AS build
 ARG BUILD_HASH
 
 # Set Node.js options (heap limit Allocation failed - JavaScript heap out of memory)
-# ENV NODE_OPTIONS="--max-old-space-size=4096"
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 WORKDIR /app
 
@@ -36,7 +36,17 @@ WORKDIR /app
 RUN apk add --no-cache git
 
 COPY package.json package-lock.json ./
-RUN npm ci --force
+RUN npm config set fetch-retries 5 \
+    && npm config set fetch-retry-factor 2 \
+    && npm config set fetch-retry-mintimeout 20000 \
+    && npm config set fetch-retry-maxtimeout 120000 \
+    && i=0; until [ "$i" -ge 3 ]; do \
+        npm ci --force && break; \
+        i=$((i + 1)); \
+        echo "npm ci failed, retrying (${i}/3)..." >&2; \
+        sleep 5; \
+    done \
+    && [ "$i" -lt 3 ]
 
 COPY . .
 ENV APP_BUILD_HASH=${BUILD_HASH}
