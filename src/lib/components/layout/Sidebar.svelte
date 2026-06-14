@@ -96,8 +96,9 @@
 
 	let showPinnedModels = false;
 	let showPinnedNotes = false;
-	let showChannels = false;
-	let showFolders = false;
+	let showChannels = true;
+	let showFolders = true;
+	let showChats = true;
 
 	let folders = {};
 	let folderRegistry = {};
@@ -511,6 +512,13 @@
 				sidebarWidth.set(width);
 			}
 		} catch {}
+
+		showChannels = true;
+		showFolders = true;
+		showChats = true;
+		localStorage.setItem('sidebar-channels-folder-state', 'true');
+		localStorage.setItem('sidebar-folders-folder-state', 'true');
+		localStorage.setItem('sidebar-chats-folder-state', 'true');
 
 		document.documentElement.style.setProperty('--sidebar-width', `${$sidebarWidth}px`);
 		sidebarWidth.subscribe((w) => {
@@ -1354,6 +1362,7 @@
 
 				<Folder
 					id="sidebar-chats"
+					bind:open={showChats}
 					className="px-2 mt-0.5"
 					name={$i18n.t('Chats')}
 					chevron={false}

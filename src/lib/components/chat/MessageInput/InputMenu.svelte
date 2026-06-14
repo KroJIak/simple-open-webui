@@ -10,7 +10,6 @@
 	import Dropdown from '$lib/components/common/Dropdown.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import DocumentArrowUp from '$lib/components/icons/DocumentArrowUp.svelte';
-	import Camera from '$lib/components/icons/Camera.svelte';
 	import Note from '$lib/components/icons/Note.svelte';
 	import Clip from '$lib/components/icons/Clip.svelte';
 	import ChatBubbleOval from '$lib/components/icons/ChatBubbleOval.svelte';
@@ -25,8 +24,6 @@
 	import Files from './InputMenu/Files.svelte';
 	import Notes from './InputMenu/Notes.svelte';
 	import Knowledge from './InputMenu/Knowledge.svelte';
-	import AttachWebpageModal from './AttachWebpageModal.svelte';
-	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -48,32 +45,14 @@
 	let show = false;
 	let tab = '';
 
-	let showAttachWebpageModal = false;
-
 	let fileUploadEnabled = true;
 	$: fileUploadEnabled =
 		fileUploadCapableModels.length === selectedModels.length &&
 		($user?.role === 'admin' || $user?.permissions?.chat?.file_upload);
 
-	let webUploadEnabled = true;
-	$: webUploadEnabled = $user?.role === 'admin' || ($user?.permissions?.chat?.web_upload ?? true);
-
 	$: if (!fileUploadEnabled && files.length > 0) {
 		files = [];
 	}
-
-	const detectMobile = () => {
-		const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-		return /android|iphone|ipad|ipod|windows phone/i.test(userAgent);
-	};
-
-	const handleFileChange = (event) => {
-		const inputFiles = Array.from(event.target?.files);
-		if (inputFiles && inputFiles.length > 0) {
-			console.log(inputFiles);
-			inputFilesHandler(inputFiles);
-		}
-	};
 
 	const onSelect = (item) => {
 		if (files.find((f) => f.id === item.id)) {
@@ -90,23 +69,6 @@
 		show = false;
 	};
 </script>
-
-<AttachWebpageModal
-	bind:show={showAttachWebpageModal}
-	onSubmit={(e) => {
-		onUpload(e);
-	}}
-/>
-
-<!-- Hidden file input used to open the camera on mobile -->
-<input
-	id="camera-input"
-	type="file"
-	accept="image/*"
-	capture="environment"
-	on:change={handleFileChange}
-	style="display: none;"
-/>
 
 <Dropdown
 	bind:show
@@ -149,62 +111,6 @@
 							<Clip />
 
 							<div class="line-clamp-1">{$i18n.t('Upload Files')}</div>
-						</button>
-					</Tooltip>
-
-					<Tooltip
-						content={fileUploadCapableModels.length !== selectedModels.length
-							? $i18n.t('Model(s) do not support file upload')
-							: !fileUploadEnabled
-								? $i18n.t('You do not have permission to upload files.')
-								: ''}
-						className="w-full"
-					>
-						<button
-							class="flex w-full gap-2 items-center px-3 py-1.5 text-sm select-none cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-xl {!fileUploadEnabled
-								? 'opacity-50'
-								: ''}"
-							type="button"
-							on:click={() => {
-								if (fileUploadEnabled) {
-									if (!detectMobile()) {
-										screenCaptureHandler();
-									} else {
-										const cameraInputElement = document.getElementById('camera-input');
-
-										if (cameraInputElement) {
-											cameraInputElement.click();
-										}
-									}
-									show = false;
-								}
-							}}
-						>
-							<Camera />
-							<div class=" line-clamp-1">{$i18n.t('Capture')}</div>
-						</button>
-					</Tooltip>
-
-					<Tooltip
-						content={!webUploadEnabled
-							? $i18n.t('You do not have permission to upload web content.')
-							: ''}
-						className="w-full"
-					>
-						<button
-							class="flex w-full gap-2 items-center px-3 py-1.5 text-sm select-none cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl {!webUploadEnabled
-								? 'opacity-50'
-								: ''}"
-							type="button"
-							on:click={() => {
-								if (webUploadEnabled) {
-									showAttachWebpageModal = true;
-									show = false;
-								}
-							}}
-						>
-							<GlobeAlt />
-							<div class="line-clamp-1">{$i18n.t('Attach Webpage')}</div>
 						</button>
 					</Tooltip>
 

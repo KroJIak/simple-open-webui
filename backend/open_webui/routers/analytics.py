@@ -3,13 +3,15 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from open_webui.config import ENABLE_ADMIN_CHAT_ACCESS
 from open_webui.internal.db import get_async_session
 from open_webui.models.chat_messages import ChatMessageModel, ChatMessages
 from open_webui.models.chats import Chats
 from open_webui.models.feedbacks import Feedbacks
 from open_webui.models.groups import Groups
 from open_webui.models.users import Users
+from open_webui.constants import ERROR_MESSAGES
 from open_webui.utils.auth import get_admin_user
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -280,6 +282,8 @@ async def get_model_chats(
     db: AsyncSession = Depends(get_async_session),
 ):
     """Get chats that used a specific model, with preview and feedback info."""
+    if not ENABLE_ADMIN_CHAT_ACCESS:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.ACCESS_PROHIBITED)
 
     # Get chat IDs that used this model
     chat_ids = await ChatMessages.get_chat_ids_by_model_id(

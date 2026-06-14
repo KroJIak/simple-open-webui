@@ -464,8 +464,7 @@ async def export_single_chat_stats(
                 detail=ERROR_MESSAGES.NOT_FOUND,
             )
 
-        # Verify the chat belongs to the user (unless admin)
-        if chat.user_id != user.id and user.role != 'admin':
+        if chat.user_id != user.id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
@@ -1023,7 +1022,7 @@ async def update_chat_message_by_id(
             detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
         )
 
-    if chat.user_id != user.id and user.role != 'admin':
+    if chat.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
@@ -1085,7 +1084,7 @@ async def send_chat_message_event_by_id(
             detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
         )
 
-    if chat.user_id != user.id and user.role != 'admin':
+    if chat.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
@@ -1125,35 +1124,24 @@ async def delete_chat_by_id(
     # before deleting the chat to prevent orphaned requests.
     await stop_item_tasks(request.app.state.redis, id)
 
-    if user.role == 'admin':
-        chat = await Chats.get_chat_by_id(id, db=db)
-        if not chat:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=ERROR_MESSAGES.NOT_FOUND,
-            )
-        await Chats.delete_orphan_tags_for_user(chat.meta.get('tags', []), user.id, threshold=1, db=db)
+    if user.role != 'admin' and not await has_permission(
+        user.id, 'chat.delete', request.app.state.config.USER_PERMISSIONS
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
+        )
 
-        result = await Chats.delete_chat_by_id(id, db=db)
+    chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ERROR_MESSAGES.NOT_FOUND,
+        )
+    await Chats.delete_orphan_tags_for_user(chat.meta.get('tags', []), user.id, threshold=1, db=db)
 
-        return result
-    else:
-        if not await has_permission(user.id, 'chat.delete', request.app.state.config.USER_PERMISSIONS):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
-            )
-
-        chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
-        if not chat:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=ERROR_MESSAGES.NOT_FOUND,
-            )
-        await Chats.delete_orphan_tags_for_user(chat.meta.get('tags', []), user.id, threshold=1, db=db)
-
-        result = await Chats.delete_chat_by_id_and_user_id(id, user.id, db=db)
-        return result
+    result = await Chats.delete_chat_by_id_and_user_id(id, user.id, db=db)
+    return result
 
 
 ############################
@@ -1415,10 +1403,7 @@ async def update_shared_chat_access_by_id(
     user=Depends(get_verified_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    if user.role == 'admin':
-        chat = await Chats.get_chat_by_id(id, db=db)
-    else:
-        chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
+    chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
     if not chat:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1449,10 +1434,7 @@ async def get_shared_chat_access_by_id(
     user=Depends(get_verified_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    if user.role == 'admin':
-        chat = await Chats.get_chat_by_id(id, db=db)
-    else:
-        chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
+    chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
     if not chat:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

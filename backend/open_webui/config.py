@@ -2522,12 +2522,16 @@ DEFAULT_PINNED_MODELS = ConfigVar(
     os.getenv('DEFAULT_PINNED_MODELS', None),
 )
 
+raw_default_prompt_suggestions = os.getenv('DEFAULT_PROMPT_SUGGESTIONS')
 try:
-    default_prompt_suggestions = json.loads(os.getenv('DEFAULT_PROMPT_SUGGESTIONS', '[]'))
+    if raw_default_prompt_suggestions is None:
+        default_prompt_suggestions = []
+    else:
+        default_prompt_suggestions = json.loads(raw_default_prompt_suggestions)
 except Exception as e:
     log.exception(f'Error loading DEFAULT_PROMPT_SUGGESTIONS: {e}')
     default_prompt_suggestions = []
-if default_prompt_suggestions == []:
+if raw_default_prompt_suggestions is None and default_prompt_suggestions == []:
     default_prompt_suggestions = [
         {
             'title': ['Help me study', 'vocabulary for a college entrance exam'],
@@ -2562,6 +2566,12 @@ DEFAULT_PROMPT_SUGGESTIONS = ConfigVar(
     'DEFAULT_PROMPT_SUGGESTIONS',
     'ui.prompt_suggestions',
     default_prompt_suggestions,
+)
+
+ENABLE_PROMPT_SUGGESTIONS = ConfigVar(
+    'ENABLE_PROMPT_SUGGESTIONS',
+    'features.enable_prompt_suggestions',
+    os.getenv('ENABLE_PROMPT_SUGGESTIONS', 'True').lower() == 'true',
 )
 
 MODEL_ORDER_LIST = ConfigVar(

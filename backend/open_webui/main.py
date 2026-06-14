@@ -198,6 +198,7 @@ from open_webui.config import (
     # OpenAI
     ENABLE_OPENAI_API,
     ENABLE_PASSWORD_CHANGE_FORM,
+    ENABLE_PROMPT_SUGGESTIONS,
     ENABLE_RAG_HYBRID_SEARCH,
     ENABLE_RAG_HYBRID_SEARCH_ENRICHED_TEXTS,
     ENABLE_RAG_LOCAL_WEB_FETCH,
@@ -901,6 +902,7 @@ app.state.config.DEFAULT_MODEL_PARAMS = DEFAULT_MODEL_PARAMS
 
 
 app.state.config.DEFAULT_PROMPT_SUGGESTIONS = DEFAULT_PROMPT_SUGGESTIONS
+app.state.config.ENABLE_PROMPT_SUGGESTIONS = ENABLE_PROMPT_SUGGESTIONS
 app.state.config.DEFAULT_USER_ROLE = DEFAULT_USER_ROLE
 app.state.config.DEFAULT_GROUP_ID = DEFAULT_GROUP_ID
 
@@ -2451,6 +2453,7 @@ async def get_app_config(request: Request):
                     'enable_message_rating': app.state.config.ENABLE_MESSAGE_RATING,
                     'enable_user_webhooks': app.state.config.ENABLE_USER_WEBHOOKS,
                     'enable_user_status': app.state.config.ENABLE_USER_STATUS,
+                    'enable_prompt_suggestions': app.state.config.ENABLE_PROMPT_SUGGESTIONS,
                     'enable_admin_export': ENABLE_ADMIN_EXPORT,
                     'enable_admin_chat_access': ENABLE_ADMIN_CHAT_ACCESS,
                     'enable_admin_analytics': ENABLE_ADMIN_ANALYTICS,
