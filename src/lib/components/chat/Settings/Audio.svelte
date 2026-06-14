@@ -35,6 +35,13 @@
 
 	// Audio speed control
 	let playbackRate = 1;
+	let browserTTSOnly = false;
+
+	$: browserTTSOnly = $config.audio.tts.engine === '';
+	$: if (browserTTSOnly && TTSEngine !== '') {
+		TTSEngine = '';
+		TTSEngineConfig = {};
+	}
 
 	const getVoices = async () => {
 		if (TTSEngine === 'browser-kokoro') {
@@ -83,6 +90,7 @@
 	};
 
 	onMount(async () => {
+		browserTTSOnly = $config.audio.tts.engine === '';
 		playbackRate = $settings.audio?.tts?.playbackRate ?? 1;
 		conversationMode = $settings.conversationMode ?? false;
 		speechAutoSend = $settings.speechAutoSend ?? false;
@@ -91,8 +99,8 @@
 		STTEngine = $settings?.audio?.stt?.engine ?? '';
 		STTLanguage = $settings?.audio?.stt?.language ?? '';
 
-		TTSEngine = $settings?.audio?.tts?.engine ?? '';
-		TTSEngineConfig = $settings?.audio?.tts?.engineConfig ?? {};
+		TTSEngine = browserTTSOnly ? '' : ($settings?.audio?.tts?.engine ?? '');
+		TTSEngineConfig = browserTTSOnly ? {} : ($settings?.audio?.tts?.engineConfig ?? {});
 
 		if ($settings?.audio?.tts?.defaultVoice === $config.audio.tts.voice) {
 			voice = $settings?.audio?.tts?.voice ?? $config.audio.tts.voice ?? '';
@@ -163,8 +171,8 @@
 					language: STTLanguage !== '' ? STTLanguage : undefined
 				},
 				tts: {
-					engine: TTSEngine !== '' ? TTSEngine : undefined,
-					engineConfig: TTSEngineConfig,
+					engine: browserTTSOnly ? undefined : TTSEngine !== '' ? TTSEngine : undefined,
+					engineConfig: browserTTSOnly ? undefined : TTSEngineConfig,
 					playbackRate: playbackRate,
 					voice: voice !== '' ? voice : undefined,
 					defaultVoice: $config?.audio?.tts?.voice ?? '',
@@ -243,20 +251,22 @@
 		<div>
 			<div class=" mb-1 text-sm font-medium">{$i18n.t('TTS Settings')}</div>
 
-			<div class=" py-0.5 flex w-full justify-between">
-				<div class=" self-center text-xs font-medium">{$i18n.t('Text-to-Speech Engine')}</div>
-				<div class="flex items-center relative">
-					<select
-						class="w-fit pr-8 rounded-sm px-2 p-1 text-xs bg-transparent outline-hidden text-right"
-						bind:value={TTSEngine}
-						aria-label={$i18n.t('Text-to-Speech Engine')}
-						placeholder={$i18n.t('Select an engine')}
-					>
-						<option value="">{$i18n.t('Default')}</option>
-						<option value="browser-kokoro">{$i18n.t('Kokoro.js (Browser)')}</option>
-					</select>
+			{#if !browserTTSOnly}
+				<div class=" py-0.5 flex w-full justify-between">
+					<div class=" self-center text-xs font-medium">{$i18n.t('Text-to-Speech Engine')}</div>
+					<div class="flex items-center relative">
+						<select
+							class="w-fit pr-8 rounded-sm px-2 p-1 text-xs bg-transparent outline-hidden text-right"
+							bind:value={TTSEngine}
+							aria-label={$i18n.t('Text-to-Speech Engine')}
+							placeholder={$i18n.t('Select an engine')}
+						>
+							<option value="">{$i18n.t('Default')}</option>
+							<option value="browser-kokoro">{$i18n.t('Kokoro.js (Browser)')}</option>
+						</select>
+					</div>
 				</div>
-			</div>
+			{/if}
 
 			{#if TTSEngine === 'browser-kokoro'}
 				<div class=" py-0.5 flex w-full justify-between">
