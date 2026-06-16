@@ -1532,6 +1532,12 @@ ENABLE_WEB_SEARCH = ConfigVar(
     os.getenv('ENABLE_WEB_SEARCH', 'False').lower() == 'true',
 )
 
+ENABLE_NATIVE_PROVIDER_WEB_SEARCH = ConfigVar(
+    'ENABLE_NATIVE_PROVIDER_WEB_SEARCH',
+    'rag.web.search.native_provider.enable',
+    os.getenv('ENABLE_NATIVE_PROVIDER_WEB_SEARCH', 'False').lower() == 'true',
+)
+
 WEB_SEARCH_ENGINE = ConfigVar(
     'WEB_SEARCH_ENGINE',
     'rag.web.search.engine',
@@ -1973,7 +1979,7 @@ IMAGE_AUTO_SIZE_MODELS_REGEX_PATTERN = os.getenv('IMAGE_AUTO_SIZE_MODELS_REGEX_P
 # Regex pattern for models that return URLs instead of base64 data.
 IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN = os.getenv('IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN', '^gpt-image')
 
-IMAGE_SIZE = ConfigVar('IMAGE_SIZE', 'image_generation.size', os.getenv('IMAGE_SIZE', '512x512'))
+IMAGE_SIZE = ConfigVar('IMAGE_SIZE', 'image_generation.size', os.getenv('IMAGE_SIZE', ''))
 
 IMAGE_STEPS = ConfigVar('IMAGE_STEPS', 'image_generation.steps', int(os.getenv('IMAGE_STEPS', 50)))
 
@@ -2970,7 +2976,7 @@ DEFAULT_ARENA_MODEL = {
     'id': 'arena-model',
     'name': 'Arena Model',
     'meta': {
-        'profile_image_url': '/favicon.png',
+        'profile_image_url': '/static/chatgpt-logo.svg',
         'description': 'Submit your questions to anonymous AI chatbots and vote on the best response.',
         'model_ids': None,
     },
@@ -3115,10 +3121,10 @@ TITLE_GENERATION_PROMPT_TEMPLATE = ConfigVar(
 )
 
 DEFAULT_TITLE_GENERATION_PROMPT_TEMPLATE = """### Task:
-Generate a concise, 3-5 word title with an emoji summarizing the chat history.
+Generate a concise, 3-5 word title summarizing the chat history.
 ### Guidelines:
 - The title should clearly represent the main theme or subject of the conversation.
-- Use emojis that enhance understanding of the topic, but avoid quotation marks or special formatting.
+- Do not use emojis, quotation marks, or special formatting.
 - Write the title in the chat's primary language; default to English if multilingual.
 - Prioritize accuracy over excessive creativity; keep it clear and simple.
 - Your entire response must consist solely of the JSON object, without any introductory or concluding text.
@@ -3127,12 +3133,12 @@ Generate a concise, 3-5 word title with an emoji summarizing the chat history.
 ### Output:
 JSON format: { "title": "your concise title here" }
 ### Examples:
-- { "title": "📉 Stock Market Trends" },
-- { "title": "🍪 Perfect Chocolate Chip Recipe" },
+- { "title": "Stock Market Trends" },
+- { "title": "Perfect Chocolate Chip Recipe" },
 - { "title": "Evolution of Music Streaming" },
 - { "title": "Remote Work Productivity Tips" },
 - { "title": "Artificial Intelligence in Healthcare" },
-- { "title": "🎮 Video Game Development Insights" }
+- { "title": "Video Game Development Insights" }
 ### Chat History:
 <chat_history>
 {{MESSAGES:END:2}}
@@ -3250,11 +3256,12 @@ QUERY_GENERATION_PROMPT_TEMPLATE = ConfigVar(
 )
 
 DEFAULT_QUERY_GENERATION_PROMPT_TEMPLATE = """### Task:
-Analyze the chat history to determine the necessity of generating search queries, in the given language. By default, **prioritize generating 1-3 broad and relevant search queries** unless it is absolutely certain that no additional information is required. The aim is to retrieve comprehensive, updated, and valuable information even with minimal uncertainty. If no search is unequivocally needed, return an empty list.
+Analyze the chat history to determine the necessity of generating search queries, in the given language. By default, **prioritize generating 5 broad and relevant search queries** unless it is absolutely certain that no additional information is required. The aim is to retrieve comprehensive, updated, and valuable information even with minimal uncertainty. If no search is unequivocally needed, return an empty list.
 
 ### Guidelines:
 - Respond **EXCLUSIVELY** with a JSON object. Any form of extra commentary, explanation, or additional text is strictly prohibited.
 - When generating search queries, respond in the format: { "queries": ["query1", "query2"] }, ensuring each query is distinct, concise, and relevant to the topic.
+- Generate exactly 5 search queries whenever a search is needed, unless the request is so narrow that fewer truly distinct useful queries are possible.
 - If and only if it is entirely certain that no useful results can be retrieved by a search, return: { "queries": [] }.
 - Err on the side of suggesting search queries if there is **any chance** they might provide useful or updated information.
 - Be concise and focused on composing high-quality search queries, avoiding unnecessary elaboration, commentary, or assumptions.

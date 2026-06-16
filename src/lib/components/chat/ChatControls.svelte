@@ -31,8 +31,6 @@
 	import Drawer from '../common/Drawer.svelte';
 	import Artifacts from './Artifacts.svelte';
 	import Embeds from './ChatControls/Embeds.svelte';
-	import FileNav from './FileNav.svelte';
-	import PyodideFileNav from './PyodideFileNav.svelte';
 	import Overview from './Overview.svelte';
 
 	const i18n = getContext('i18n');
@@ -55,6 +53,11 @@
 	export let codeInterpreterEnabled = false;
 
 	export let pane: Pane | null = null;
+
+	let FileNavComponent = null;
+	let PyodideFileNavComponent = null;
+	let fileNavLoading = false;
+	let pyodideFileNavLoading = false;
 
 	let largeScreen = false;
 	let dragged = false;
@@ -90,6 +93,36 @@
 	// Auto-close if there are no visible tabs
 	$: if (!showControlsTab && !showFilesTab && !showOverviewTab) {
 		showControls.set(false);
+	}
+
+	const ensureFileNavLoaded = async () => {
+		if (FileNavComponent || fileNavLoading) return;
+		fileNavLoading = true;
+		try {
+			const module = await import('./FileNav.svelte');
+			FileNavComponent = module.default;
+		} finally {
+			fileNavLoading = false;
+		}
+	};
+
+	const ensurePyodideFileNavLoaded = async () => {
+		if (PyodideFileNavComponent || pyodideFileNavLoading) return;
+		pyodideFileNavLoading = true;
+		try {
+			const module = await import('./PyodideFileNav.svelte');
+			PyodideFileNavComponent = module.default;
+		} finally {
+			pyodideFileNavLoading = false;
+		}
+	};
+
+	$: if (activeTab === 'files' && $selectedTerminalId) {
+		ensureFileNavLoaded();
+	}
+
+	$: if (activeTab === 'files' && codeInterpreterEnabled && !$selectedTerminalId) {
+		ensurePyodideFileNavLoaded();
 	}
 
 	// Auto-switch to Files tab when display_file is triggered
@@ -374,9 +407,25 @@
 									onClose={() => showControls.set(false)}
 								/>
 							{:else if activeTab === 'files' && $selectedTerminalId}
-								<FileNav onAttach={handleTerminalAttach} {chatId} />
+								{#if FileNavComponent}
+									<svelte:component
+										this={FileNavComponent}
+										onAttach={handleTerminalAttach}
+										{chatId}
+									/>
+								{:else}
+									<div class="flex h-full items-center justify-center">
+										<Spinner className="size-5" />
+									</div>
+								{/if}
 							{:else if activeTab === 'files' && codeInterpreterEnabled}
-								<PyodideFileNav />
+								{#if PyodideFileNavComponent}
+									<svelte:component this={PyodideFileNavComponent} />
+								{:else}
+									<div class="flex h-full items-center justify-center">
+										<Spinner className="size-5" />
+									</div>
+								{/if}
 							{:else}
 								<Controls embed={true} {models} bind:chatFiles bind:params />
 							{/if}
@@ -525,9 +574,26 @@
 										onClose={() => showControls.set(false)}
 									/>
 								{:else if activeTab === 'files' && $selectedTerminalId}
-									<FileNav onAttach={handleTerminalAttach} overlay={dragged} {chatId} />
+									{#if FileNavComponent}
+										<svelte:component
+											this={FileNavComponent}
+											onAttach={handleTerminalAttach}
+											overlay={dragged}
+											{chatId}
+										/>
+									{:else}
+										<div class="flex h-full items-center justify-center">
+											<Spinner className="size-5" />
+										</div>
+									{/if}
 								{:else if activeTab === 'files' && codeInterpreterEnabled}
-									<PyodideFileNav overlay={dragged} />
+									{#if PyodideFileNavComponent}
+										<svelte:component this={PyodideFileNavComponent} overlay={dragged} />
+									{:else}
+										<div class="flex h-full items-center justify-center">
+											<Spinner className="size-5" />
+										</div>
+									{/if}
 								{:else}
 									<Controls embed={true} {models} bind:chatFiles bind:params />
 								{/if}

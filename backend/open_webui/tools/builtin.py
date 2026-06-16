@@ -227,12 +227,21 @@ async def search_web(
     try:
         engine = __request__.app.state.config.WEB_SEARCH_ENGINE
         user = UserModel(**__user__) if __user__ else None
+        deep_web_search = bool(getattr(__request__.state, 'deep_web_search', False))
 
         configured = __request__.app.state.config.WEB_SEARCH_RESULT_COUNT
+        if deep_web_search:
+            configured = max(configured or 3, 5)
         max_count = 5 if configured is None else configured
         count = max(1, min(count, max_count)) if count is not None else max_count
 
-        results = await _search_web(__request__, engine, query, user)
+        results = await _search_web(
+            __request__,
+            engine,
+            query,
+            user,
+            result_count=max_count,
+        )
 
         # Limit results
         results = results[:count] if results else []

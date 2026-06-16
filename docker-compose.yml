@@ -1,4 +1,100 @@
 services:
+  codex-proxy:
+    image: ghcr.io/icebear0828/codex-proxy:v2.0.82
+    container_name: codex-proxy
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - 127.0.0.1:${CODEX_PROXY_PORT-18080}:8080
+      - 127.0.0.1:${CODEX_PROXY_OAUTH_PORT-1455}:1455
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - CODEX_PROXY_HOST=0.0.0.0
+      - CODEX_PROXY_API_KEY=${CODEX_PROXY_API_KEY}
+      - CODEX_PLATFORM=${CODEX_PLATFORM}
+      - CODEX_ARCH=${CODEX_ARCH}
+      - CODEX_JWT_TOKEN=${CODEX_JWT_TOKEN}
+    command:
+      - sh
+      - -lc
+      - |
+        set -eu
+        key="$${CODEX_PROXY_API_KEY:?CODEX_PROXY_API_KEY is required}"
+        mkdir -p /app/data
+        cat > /app/data/local.yaml <<EOF
+        server:
+          proxy_api_key: $$key
+        EOF
+        exec node dist/index.js
+    volumes:
+      - codex-proxy-data:/app/data
+      - codex-proxy-config:/app/config
+    restart: unless-stopped
+
+  cliproxyapi:
+    image: eceasy/cli-proxy-api:latest
+    container_name: cliproxyapi
+    ports:
+      - 127.0.0.1:${CLIPROXYAPI_PORT-18317}:8317
+      - 127.0.0.1:${CLIPROXYAPI_MANAGEMENT_PORT-18085}:8085
+    environment:
+      - CLIPROXYAPI_API_KEY=${CLIPROXYAPI_API_KEY}
+      - CLIPROXYAPI_MANAGEMENT_KEY=${CLIPROXYAPI_MANAGEMENT_KEY}
+      - CLIPROXYAPI_UPSTREAM_BASE_URL=${CLIPROXYAPI_UPSTREAM_BASE_URL}
+      - CLIPROXYAPI_UPSTREAM_API_KEY=${CLIPROXYAPI_UPSTREAM_API_KEY}
+    command:
+      - sh
+      - -lc
+      - |
+        set -eu
+        strip_forced_web_search() {
+          awk 'BEGIN{drop=0} /^payload:/{drop=1} !drop{print}' /CLIProxyAPI/config.yaml > /tmp/config.yaml
+          mv /tmp/config.yaml /CLIProxyAPI/config.yaml
+        }
+        api_key="$${CLIPROXYAPI_API_KEY:?CLIPROXYAPI_API_KEY is required}"
+        management_key="$${CLIPROXYAPI_MANAGEMENT_KEY:?CLIPROXYAPI_MANAGEMENT_KEY is required}"
+        upstream_base_url="$${CLIPROXYAPI_UPSTREAM_BASE_URL:?CLIPROXYAPI_UPSTREAM_BASE_URL is required}"
+        upstream_api_key="$${CLIPROXYAPI_UPSTREAM_API_KEY:?CLIPROXYAPI_UPSTREAM_API_KEY is required}"
+        mkdir -p /CLIProxyAPI /root/.cli-proxy-api /CLIProxyAPI/logs
+        cat > /CLIProxyAPI/config.yaml <<EOF
+        host: ""
+        port: 8317
+        auth-dir: "~/.cli-proxy-api"
+        api-keys:
+          - "$$api_key"
+        remote-management:
+          allow-remote: false
+          secret-key: "$$management_key"
+        request-retry: 3
+        max-retry-credentials: 1
+        max-retry-interval: 30
+        codex-api-key:
+          - api-key: "$$upstream_api_key"
+            base-url: "$$upstream_base_url"
+            models:
+              - name: "gpt-5.5"
+                alias: "gpt-5.5"
+              - name: "gpt-5.4"
+                alias: "gpt-5.4"
+              - name: "gpt-5.4-mini"
+                alias: "gpt-5.4-mini"
+        EOF
+        /CLIProxyAPI/CLIProxyAPI &
+        pid=$$!
+        for _ in $$(seq 1 30); do
+          if grep -q '^payload:' /CLIProxyAPI/config.yaml; then
+            strip_forced_web_search
+            break
+          fi
+          sleep 1
+        done
+        wait "$$pid"
+    volumes:
+      - cliproxyapi-auths:/root/.cli-proxy-api
+      - cliproxyapi-logs:/CLIProxyAPI/logs
+    restart: unless-stopped
+
   open-webui:
     build:
       context: .
@@ -12,6 +108,7 @@ services:
     environment:
       - 'WEBUI_NAME=${WEBUI_NAME}'
       - 'DEFAULT_LOCALE=${DEFAULT_LOCALE}'
+      - 'USER_AGENT=${USER_AGENT}'
       - 'DEFAULT_PROMPT_SUGGESTIONS=${DEFAULT_PROMPT_SUGGESTIONS}'
       - 'ENABLE_PROMPT_SUGGESTIONS=${ENABLE_PROMPT_SUGGESTIONS}'
       - 'ENABLE_CHANNELS=${ENABLE_CHANNELS}'
@@ -31,10 +128,29 @@ services:
       - 'CODE_INTERPRETER_ENGINE=${CODE_INTERPRETER_ENGINE}'
       - 'ENABLE_ADMIN_CHAT_ACCESS=${ENABLE_ADMIN_CHAT_ACCESS}'
       - 'ENABLE_ADMIN_EXPORT=${ENABLE_ADMIN_EXPORT}'
+      - 'USER_PERMISSIONS_CHAT_CALL=${USER_PERMISSIONS_CHAT_CALL}'
+      - 'ENABLE_IMAGE_GENERATION=${ENABLE_IMAGE_GENERATION}'
+      - 'IMAGE_GENERATION_ENGINE=${IMAGE_GENERATION_ENGINE}'
+      - 'IMAGE_GENERATION_MODEL=${IMAGE_GENERATION_MODEL}'
+      - 'IMAGE_SIZE=${IMAGE_SIZE}'
+      - 'ENABLE_IMAGE_PROMPT_GENERATION=${ENABLE_IMAGE_PROMPT_GENERATION}'
+      - 'IMAGES_OPENAI_API_BASE_URL=${IMAGES_OPENAI_API_BASE_URL}'
+      - 'IMAGES_OPENAI_API_KEY=${IMAGES_OPENAI_API_KEY}'
       - 'ENABLE_WEB_SEARCH=${ENABLE_WEB_SEARCH}'
+      - 'ENABLE_NATIVE_PROVIDER_WEB_SEARCH=${ENABLE_NATIVE_PROVIDER_WEB_SEARCH}'
       - 'WEB_SEARCH_ENGINE=${WEB_SEARCH_ENGINE}'
       - 'DDGS_BACKEND=${DDGS_BACKEND}'
       - 'WEB_SEARCH_RESULT_COUNT=${WEB_SEARCH_RESULT_COUNT}'
+      - 'WEB_SEARCH_CONCURRENT_REQUESTS=${WEB_SEARCH_CONCURRENT_REQUESTS}'
+      - 'ENABLE_BASE_MODELS_CACHE=${ENABLE_BASE_MODELS_CACHE}'
+      - 'AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST=${AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST}'
+      - 'AIOHTTP_CLIENT_READ_BUFSIZE=${AIOHTTP_CLIENT_READ_BUFSIZE}'
+      - 'AIOHTTP_CLIENT_MAX_LINE_SIZE=${AIOHTTP_CLIENT_MAX_LINE_SIZE}'
+      - 'AIOHTTP_CLIENT_MAX_FIELD_SIZE=${AIOHTTP_CLIENT_MAX_FIELD_SIZE}'
+      - 'BYPASS_WEB_SEARCH_WEB_LOADER=${BYPASS_WEB_SEARCH_WEB_LOADER}'
+      - 'BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL=${BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL}'
+      - 'WEB_LOADER_TIMEOUT=${WEB_LOADER_TIMEOUT}'
+      - 'ENABLE_SEARCH_QUERY_GENERATION=${ENABLE_SEARCH_QUERY_GENERATION}'
       - 'USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS=${USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS}'
       - 'USER_PERMISSIONS_WORKSPACE_KNOWLEDGE_ACCESS=${USER_PERMISSIONS_WORKSPACE_KNOWLEDGE_ACCESS}'
       - 'USER_PERMISSIONS_WORKSPACE_PROMPTS_ACCESS=${USER_PERMISSIONS_WORKSPACE_PROMPTS_ACCESS}'
@@ -47,6 +163,14 @@ services:
     restart: unless-stopped
 
 volumes:
+  codex-proxy-data:
+    name: codex-proxy-data
+  codex-proxy-config:
+    name: codex-proxy-config
+  cliproxyapi-auths:
+    name: cliproxyapi-auths
+  cliproxyapi-logs:
+    name: cliproxyapi-logs
   open-webui:
     external: true
     name: open-webui

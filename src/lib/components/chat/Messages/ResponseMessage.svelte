@@ -36,11 +36,9 @@
 		removeDetails,
 		removeAllDetails
 	} from '$lib/utils';
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
 	import equal from 'fast-deep-equal';
 
-	import Name from './Name.svelte';
-	import ProfileImage from './ProfileImage.svelte';
 	import Skeleton from './Skeleton.svelte';
 	import Image from '$lib/components/common/Image.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -658,42 +656,9 @@
 		dir={$settings.chatDirection}
 		style="scroll-margin-top: 3rem;"
 	>
-		<div class={`shrink-0 ltr:mr-3 rtl:ml-3 hidden @lg:flex mt-1 `}>
-			<ProfileImage
-				src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model?.id}&lang=${$i18n.language}`}
-				className={'size-8 assistant-message-profile-image'}
-			/>
-		</div>
-
-		<div class="flex-auto w-0 pl-1 relative">
-			<Name>
-				<Tooltip content={model?.name ?? message.model} placement="top-start">
-					<span id="response-message-model-name" class="line-clamp-1 text-black dark:text-white">
-						{model?.name ?? message.model}
-					</span>
-				</Tooltip>
-
-				{#if message.timestamp}
-					<div
-						class="self-center text-xs font-medium first-letter:capitalize ml-0.5 translate-y-[1px] {($settings?.highContrastMode ??
-						false)
-							? 'dark:text-gray-100 text-gray-900'
-							: 'invisible group-hover:visible transition text-gray-400'}"
-					>
-						<Tooltip content={dayjs(message.timestamp * 1000).format('LLLL')}>
-							<span class="line-clamp-1"
-								>{$i18n.t(formatDate(message.timestamp * 1000), {
-									LOCALIZED_TIME: dayjs(message.timestamp * 1000).format('LT'),
-									LOCALIZED_DATE: dayjs(message.timestamp * 1000).format('L')
-								})}</span
-							>
-						</Tooltip>
-					</div>
-				{/if}
-			</Name>
-
+		<div class="flex-auto w-0 relative">
 			<div>
-				<div class="chat-{message.role} w-full min-w-full markdown-prose">
+				<div class="chat-{message.role} w-full min-w-full markdown-prose-sm">
 					<div>
 						{#if model?.info?.meta?.capabilities?.status_updates ?? true}
 							<StatusHistory statusHistory={message?.statusHistory} />
@@ -707,7 +672,12 @@
 								{#each message.files.filter((f) => ['image', 'file'].includes(f.type)) as file}
 									<div>
 										{#if file.type === 'image' || (file?.content_type ?? '').startsWith('image/')}
-											<Image src={file.url} alt={message.content} />
+											<Image
+												src={file.url}
+												alt={message.content}
+												className="max-w-full"
+												imageClassName="max-w-full md:max-w-[36rem] max-h-[28rem] object-contain rounded-lg"
+											/>
 										{:else}
 											<FileItem
 												item={file}
@@ -893,7 +863,7 @@
 				{#if !edit}
 					<div
 						bind:this={buttonsContainerElement}
-						class="flex justify-start overflow-x-auto buttons text-gray-600 dark:text-gray-500 mt-0.5"
+						class="flex items-center flex-wrap justify-start overflow-x-auto buttons text-gray-600 dark:text-gray-500 mt-0.5"
 					>
 						{#if message.done || siblings.length > 1}
 							{#if siblings.length > 1}
@@ -1410,8 +1380,31 @@
 													</svg>
 												</button>
 											</Tooltip>
-										{/if}
 									{/if}
+								{/if}
+
+								{#if message.done}
+									<div
+										class="ml-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap"
+									>
+										<Tooltip content={model?.name ?? message.model} placement="bottom">
+											<span id="response-message-model-name" class="line-clamp-1 max-w-[13rem]">
+												{model?.name ?? message.model}
+											</span>
+										</Tooltip>
+
+										{#if message.timestamp}
+											<Tooltip content={dayjs(message.timestamp * 1000).format('LLLL')}>
+												<span class="first-letter:capitalize">
+													{$i18n.t(formatDate(message.timestamp * 1000), {
+														LOCALIZED_TIME: dayjs(message.timestamp * 1000).format('LT'),
+														LOCALIZED_DATE: dayjs(message.timestamp * 1000).format('L')
+													})}
+												</span>
+											</Tooltip>
+										{/if}
+									</div>
+								{/if}
 
 									{#if $user?.role === 'admin' || ($user?.permissions?.chat?.delete_message ?? true)}
 										{#if siblings.length > 1}

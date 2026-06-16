@@ -611,7 +611,8 @@
 		if ((event.chat_id !== $chatId && !$temporaryChatEnabled) || isInBackground) {
 			if (type === 'chat:completion') {
 				const { done, content, title } = data;
-				const displayTitle = title || $i18n.t('New Chat');
+				const displayTitle =
+					!title || title === 'New Chat' ? $i18n.t('New Chat') : title;
 
 				if (done) {
 					if (

@@ -92,6 +92,25 @@
 	let mediaRecorder;
 	let audioChunks = [];
 
+	const getSpeechRecognitionConstructor = () => {
+		if (typeof window === 'undefined') return null;
+		const speechRecognitionWindow = window as Window & {
+			SpeechRecognition?: new () => any;
+			webkitSpeechRecognition?: new () => any;
+		};
+		return (
+			speechRecognitionWindow.SpeechRecognition ||
+			speechRecognitionWindow.webkitSpeechRecognition ||
+			null
+		);
+	};
+
+	const isWebSpeechRecognitionEnabled = () =>
+		$config.audio.stt.engine === 'web' || ($settings?.audio?.stt?.engine ?? '') === 'web';
+
+	const getSpeechRecognitionLanguage = () =>
+		$settings?.audio?.stt?.language || document.documentElement.lang || navigator.language || 'en-US';
+
 	const MIN_DECIBELS = -45;
 	let VISUALIZER_BUFFER_LENGTH = 300;
 
@@ -206,6 +225,14 @@
 
 	const startRecording = async () => {
 		loading = true;
+		transcription = '';
+
+		if (transcribe && isWebSpeechRecognitionEnabled() && !getSpeechRecognitionConstructor()) {
+			toast.error($i18n.t('This browser does not support speech recognition.'));
+			loading = false;
+			recording = false;
+			return;
+		}
 
 		try {
 			if (displayMedia) {
@@ -298,20 +325,31 @@
 		}
 
 		if (transcribe) {
-			if ($config.audio.stt.engine === 'web' || ($settings?.audio?.stt?.engine ?? '') === 'web') {
-				if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+			if (isWebSpeechRecognitionEnabled()) {
+				const SpeechRecognitionConstructor = getSpeechRecognitionConstructor();
+				if (SpeechRecognitionConstructor) {
 					// Create a SpeechRecognition object
-					speechRecognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+					speechRecognition = new SpeechRecognitionConstructor();
 
 					// Set continuous to true for continuous recognition
 					speechRecognition.continuous = true;
+					speechRecognition.interimResults = false;
+					speechRecognition.lang = getSpeechRecognitionLanguage();
 
 					// Set the timeout for turning off the recognition after inactivity (in milliseconds)
 					const inactivityTimeout = 2000; // 3 seconds
 
 					let timeoutId;
 					// Start recognition
-					speechRecognition.start();
+					try {
+						speechRecognition.start();
+					} catch (error) {
+						console.error('Error starting speech recognition:', error);
+						toast.error($i18n.t('Error starting speech recognition.'));
+						onCancel();
+						stopRecording();
+						return;
+					}
 
 					// Event triggered when speech is recognized
 					speechRecognition.onresult = async (event) => {
@@ -373,6 +411,7 @@
 
 		stopDurationCounter();
 		audioChunks = [];
+		transcription = '';
 		visualizerData = Array(VISUALIZER_BUFFER_LENGTH).fill(0);
 
 		if (stream) {
@@ -487,14 +526,14 @@
 				<div class="flex items-center h-full">
 					<div
 						class="w-[2px] shrink-0
-                    
-                    {loading
+	                    
+	                    {loading
 							? ' bg-gray-500 dark:bg-gray-400   '
 							: 'bg-indigo-500 dark:bg-indigo-400  '} 
-                    
-                    inline-block h-full"
+	                    
+	                    inline-block h-full"
 						style="height: {Math.min(100, Math.max(14, rms * 100))}%;"
-					/>
+					></div>
 				</div>
 			{/each}
 		</div>
@@ -606,12 +645,13 @@
 					>
 				</div>
 			{:else}
-				<button
-					id="confirm-recording-button"
-					type="button"
-					class="p-1.5 bg-indigo-500 text-white dark:bg-indigo-500 dark:text-blue-950 rounded-full"
-					on:click={async () => {
-						await confirmRecording();
+					<button
+						id="confirm-recording-button"
+						type="button"
+						aria-label="Confirm recording"
+						class="p-1.5 bg-indigo-500 text-white dark:bg-indigo-500 dark:text-blue-950 rounded-full"
+						on:click={async () => {
+							await confirmRecording();
 					}}
 				>
 					<svg

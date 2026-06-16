@@ -135,6 +135,7 @@ type BaseModel = {
 	name: string;
 	info?: ModelConfig;
 	owned_by: 'ollama' | 'openai' | 'arena';
+	provider?: string;
 };
 
 export interface OpenAIModel extends BaseModel {
@@ -179,7 +180,8 @@ type OllamaModelDetails = {
 };
 
 type Settings = {
-	pinnedModels?: never[];
+	pinnedModels?: string[];
+	pinnedModelsCustomized?: boolean;
 	toolServers?: never[];
 	detectArtifacts?: boolean;
 	showUpdateToast?: boolean;

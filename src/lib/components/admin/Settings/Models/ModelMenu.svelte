@@ -31,6 +31,13 @@
 	export let onClose: Function;
 
 	let show = false;
+
+	const getEffectivePinnedModelIds = () =>
+		$settings?.pinnedModelsCustomized === true
+			? ($settings?.pinnedModels ?? [])
+			: (($config?.default_pinned_models ?? '').split(',').filter((id) => id));
+
+	$: isPinned = getEffectivePinnedModelIds().includes(model?.id);
 </script>
 
 <Dropdown
@@ -107,14 +114,14 @@
 					pinModelHandler(model?.id);
 				}}
 			>
-				{#if ($settings?.pinnedModels ?? []).includes(model?.id)}
+				{#if isPinned}
 					<PinSlash />
 				{:else}
 					<Pin />
 				{/if}
 
 				<div class="flex items-center">
-					{#if ($settings?.pinnedModels ?? []).includes(model?.id)}
+					{#if isPinned}
 						{$i18n.t('Hide from Sidebar')}
 					{:else}
 						{$i18n.t('Keep in Sidebar')}

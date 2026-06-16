@@ -663,7 +663,23 @@ class ChatTable:
 
             if message_id in history.get('messages', {}):
                 message_files = history['messages'][message_id].get('files', [])
-                message_files = message_files + files
+                merged_files = [*message_files, *files]
+                deduped_files = []
+                seen = set()
+
+                for file_item in merged_files:
+                    if isinstance(file_item, dict):
+                        file_key = json.dumps(file_item, sort_keys=True, ensure_ascii=False)
+                    else:
+                        file_key = str(file_item)
+
+                    if file_key in seen:
+                        continue
+
+                    seen.add(file_key)
+                    deduped_files.append(file_item)
+
+                message_files = deduped_files
                 history['messages'][message_id]['files'] = message_files
 
             chat['history'] = history

@@ -10,7 +10,6 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import { copyToClipboard, sanitizeResponseContent } from '$lib/utils';
 	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte';
-	import Check from '$lib/components/icons/Check.svelte';
 	import ModelItemMenu from './ModelItemMenu.svelte';
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
 	import { toast } from 'svelte-sonner';
@@ -41,7 +40,19 @@
 		}
 	};
 
+	const formatMultiplier = (value: unknown) => {
+		if (value === null || value === undefined || value === '') return '';
+		const number = Number(value);
+
+		return Number.isFinite(number) ? `${Number.parseFloat(String(number))}x` : '';
+	};
+
+	const getModelUsageMultiplier = (model: any) =>
+		model?.info?.meta?.usage_multiplier ?? model?.meta?.usage_multiplier ?? null;
+
 	let showMenu = false;
+	$: modelUsageMultiplier = formatMultiplier(getModelUsageMultiplier(item?.model));
+	$: displayLabel = modelUsageMultiplier ? `${item.label} (${modelUsageMultiplier})` : item.label;
 </script>
 
 <button
@@ -75,7 +86,7 @@
 			</div>
 		{/if} -->
 
-		<div class="flex items-center gap-2">
+		<div class="flex min-w-0 items-center gap-2">
 			<div class="flex items-center min-w-fit">
 				<Tooltip content={$user?.role === 'admin' ? (item?.value ?? '') : ''} placement="top-start">
 					<img
@@ -84,21 +95,21 @@
 						class="rounded-full size-5 flex items-center"
 						loading="lazy"
 						on:error={(e) => {
-							e.currentTarget.src = '/favicon.png';
+							e.currentTarget.src = '/static/chatgpt-logo.svg';
 						}}
 					/>
 				</Tooltip>
 			</div>
 
-			<div class="flex items-center">
-				<Tooltip content={`${item.label} (${item.value})`} placement="top-start">
+			<div class="flex min-w-0 flex-1 items-center">
+				<Tooltip content={`${displayLabel} (${item.value})`} placement="top-start">
 					<div class="line-clamp-1">
-						{item.label}
+						{displayLabel}
 					</div>
 				</Tooltip>
 			</div>
 
-			<div class=" shrink-0 flex items-center gap-2">
+			<div class="shrink-0 flex items-center gap-2">
 				{#if item.model.owned_by === 'ollama'}
 					{#if (item.model.ollama?.details?.parameter_size ?? '') !== ''}
 						<div class="flex items-center translate-y-[0.5px]">
@@ -277,11 +288,5 @@
 				<EllipsisHorizontal />
 			</button>
 		</ModelItemMenu>
-
-		{#if value === item.value}
-			<div>
-				<Check className="size-3" />
-			</div>
-		{/if}
 	</div>
 </button>

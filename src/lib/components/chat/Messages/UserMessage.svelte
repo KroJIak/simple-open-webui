@@ -6,11 +6,9 @@
 	import { models, settings } from '$lib/stores';
 	import { user as _user } from '$lib/stores';
 	import { copyToClipboard as _copyToClipboard, formatDate } from '$lib/utils';
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
 	import equal from 'fast-deep-equal';
 
-	import Name from './Name.svelte';
-	import ProfileImage from './ProfileImage.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import FileItem from '$lib/components/common/FileItem.svelte';
 	import Markdown from './Markdown.svelte';
@@ -133,20 +131,10 @@
 	id="message-{message.id}"
 	style="scroll-margin-top: 3rem;"
 >
-	{#if !($settings?.chatBubble ?? true)}
-		<div class={`shrink-0 ltr:mr-3 rtl:ml-3 mt-1`}>
-			<ProfileImage
-				src={user?.id
-					? `${WEBUI_API_BASE_URL}/users/${user.id}/profile/image`
-					: `${WEBUI_BASE_URL}/static/favicon.png`}
-				className={'size-8 user-message-profile-image'}
-			/>
-		</div>
-	{/if}
 	<div class="flex-auto w-0 max-w-full pl-1">
 		{#if !($settings?.chatBubble ?? true)}
 			<div>
-				<Name>
+				<div class="flex items-center gap-1.5 text-sm font-medium text-black dark:text-white">
 					{#if message.user}
 						{$i18n.t('You')}
 						<span class=" text-gray-500 text-sm font-medium">{message?.user ?? ''}</span>
@@ -172,12 +160,12 @@
 									>{$i18n.t(formatDate(message.timestamp * 1000), {
 										LOCALIZED_TIME: dayjs(message.timestamp * 1000).format('LT'),
 										LOCALIZED_DATE: dayjs(message.timestamp * 1000).format('L')
-									})}</span
+							})}</span
 								>
 							</Tooltip>
 						</div>
 					{/if}
-				</Name>
+				</div>
 			</div>
 		{:else if message.timestamp}
 			<div class="flex justify-end pr-2 text-xs">
@@ -199,7 +187,7 @@
 			</div>
 		{/if}
 
-		<div class="chat-{message.role} w-full min-w-full markdown-prose">
+		<div class="chat-{message.role} w-full min-w-full markdown-prose-sm">
 			{#if edit !== true}
 				{#if message.files}
 					<div

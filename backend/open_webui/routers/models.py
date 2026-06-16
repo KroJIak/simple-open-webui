@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+DEFAULT_MODEL_PROFILE_IMAGE_URL = '/static/chatgpt-logo.svg'
 
 
 def _safe_static_redirect_path(url: str) -> str | None:
@@ -558,7 +559,7 @@ async def get_model_profile_image(
                 # only serve known-safe raster types inline; reject SVG/unknown (can run script on our origin)
                 if media_type not in PROFILE_IMAGE_ALLOWED_MIME_TYPES:
                     return RedirectResponse(
-                        url='/static/favicon.png',
+                        url=DEFAULT_MODEL_PROFILE_IMAGE_URL,
                         status_code=status.HTTP_302_FOUND,
                     )
 
@@ -585,7 +586,7 @@ async def get_model_profile_image(
                 )
 
     return RedirectResponse(
-        url='/static/favicon.png',
+        url=DEFAULT_MODEL_PROFILE_IMAGE_URL,
         status_code=status.HTTP_302_FOUND,
     )
 

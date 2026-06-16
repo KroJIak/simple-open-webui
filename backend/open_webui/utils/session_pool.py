@@ -28,6 +28,9 @@ from typing import Optional
 
 import aiohttp
 from open_webui.env import (
+    AIOHTTP_CLIENT_MAX_FIELD_SIZE,
+    AIOHTTP_CLIENT_MAX_LINE_SIZE,
+    AIOHTTP_CLIENT_READ_BUFSIZE,
     AIOHTTP_CLIENT_TIMEOUT,
     AIOHTTP_POOL_CONNECTIONS,
     AIOHTTP_POOL_CONNECTIONS_PER_HOST,
@@ -61,12 +64,17 @@ async def get_session() -> aiohttp.ClientSession:
             connector=connector,
             timeout=timeout,
             trust_env=True,
+            read_bufsize=AIOHTTP_CLIENT_READ_BUFSIZE,
+            max_line_size=AIOHTTP_CLIENT_MAX_LINE_SIZE,
+            max_field_size=AIOHTTP_CLIENT_MAX_FIELD_SIZE,
         )
         log.info(
-            'Created shared aiohttp session pool (limit=%s, per_host=%s, dns_ttl=%d)',
+            'Created shared aiohttp session pool (limit=%s, per_host=%s, dns_ttl=%d, read_bufsize=%d, max_line_size=%d)',
             AIOHTTP_POOL_CONNECTIONS or 'unlimited',
             AIOHTTP_POOL_CONNECTIONS_PER_HOST or 'unlimited',
             AIOHTTP_POOL_DNS_TTL,
+            AIOHTTP_CLIENT_READ_BUFSIZE,
+            AIOHTTP_CLIENT_MAX_LINE_SIZE,
         )
     return _session
 

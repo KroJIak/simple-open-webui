@@ -308,6 +308,7 @@
 	});
 
 	let showDeleteConfirm = false;
+	$: displayTitle = title === 'New Chat' ? $i18n.t('New Chat') : title;
 
 	const chatTitleInputKeydownHandler = (e) => {
 		if (e.key === 'Enter') {
@@ -424,7 +425,7 @@
 	}}
 >
 	<div class=" text-sm text-gray-500 flex-1 line-clamp-3">
-		{$i18n.t('This will delete')} <span class="  font-semibold">{title}</span>.
+		{$i18n.t('This will delete')} <span class="  font-semibold">{displayTitle}</span>.
 	</div>
 </DeleteConfirmDialog>
 
@@ -434,7 +435,7 @@
 			<div class="flex items-center gap-1">
 				<Document className=" size-[18px]" strokeWidth="2" />
 				<div class=" text-xs text-white line-clamp-1">
-					{title}
+					{displayTitle}
 				</div>
 			</div>
 		</div>
@@ -543,7 +544,7 @@
 						? 'font-medium text-gray-900 dark:text-gray-100'
 						: ''}"
 				>
-					{title}
+					{displayTitle}
 				</div>
 			</div>
 

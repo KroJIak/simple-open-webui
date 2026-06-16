@@ -212,6 +212,7 @@ from open_webui.config import (
     ENABLE_VOICE_MODE_PROMPT,
     ENABLE_WEB_LOADER_SSL_VERIFICATION,
     # Retrieval (Web Search)
+    ENABLE_NATIVE_PROVIDER_WEB_SEARCH,
     ENABLE_WEB_SEARCH,
     # Misc
     ENV,
@@ -767,6 +768,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+def get_localized_new_chat_title(request: Request, explicit_title: str | None = None) -> str:
+    if explicit_title:
+        return explicit_title
+
+    locale = (
+        request.headers.get('x-openwebui-locale')
+        or request.headers.get('accept-language', '').split(',')[0].strip()
+        or str(DEFAULT_LOCALE or 'en-US')
+    )
+    normalized_locale = locale.lower()
+
+    if normalized_locale.startswith('ru'):
+        return 'Новый чат'
+
+    return 'New Chat'
+
 # Used by readiness checks to gate traffic until startup work is done.
 app.state.startup_complete = False
 
@@ -1092,6 +1110,7 @@ app.state.config.YOUTUBE_LOADER_PROXY_URL = YOUTUBE_LOADER_PROXY_URL
 
 
 app.state.config.ENABLE_WEB_SEARCH = ENABLE_WEB_SEARCH
+app.state.config.ENABLE_NATIVE_PROVIDER_WEB_SEARCH = ENABLE_NATIVE_PROVIDER_WEB_SEARCH
 app.state.config.WEB_SEARCH_ENGINE = WEB_SEARCH_ENGINE
 app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST = WEB_SEARCH_DOMAIN_FILTER_LIST
 app.state.config.WEB_SEARCH_RESULT_COUNT = WEB_SEARCH_RESULT_COUNT
@@ -1684,6 +1703,10 @@ async def chat_completion(
     form_data: dict,
     user=Depends(get_verified_user),
 ):
+    localized_new_chat_title = get_localized_new_chat_title(
+        request, form_data.pop('new_chat_title', None)
+    )
+
     if not request.app.state.MODELS:
         await get_all_models(request, user=user)
 
@@ -1713,12 +1736,33 @@ async def chat_completion(
             request.state.direct = True
             request.state.model = model
 
+        def get_model_provider(model_item):
+            if not isinstance(model_item, dict):
+                return ''
+            return (model_item.get('provider') or model_item.get('openai', {}).get('provider') or '') or ''
+
         # Model params: global defaults as base, per-model overrides win
         default_model_params = getattr(request.app.state.config, 'DEFAULT_MODEL_PARAMS', None) or {}
         model_info_params = {
             **default_model_params,
             **(model_info.params.model_dump() if model_info and model_info.params else {}),
         }
+
+        codex_cli_provider = get_model_provider(model) == 'codex_cli'
+        codex_cli_image_generation = codex_cli_provider and bool(
+            (form_data.get('features') or {}).get('image_generation')
+        )
+
+        if codex_cli_provider:
+            form_data.setdefault('params', {})
+            # Keep Codex CLI in native mode by default, but route image-generation
+            # requests through Open WebUI's own search/prompt/image pipeline.
+            if codex_cli_image_generation:
+                form_data['params']['function_calling'] = 'default'
+                model_info_params['function_calling'] = 'default'
+            else:
+                form_data['params']['function_calling'] = 'native'
+                model_info_params['function_calling'] = 'native'
 
         # Check base model existence for custom models
         if model_info and model_info.base_model_id:
@@ -1808,6 +1852,7 @@ async def chat_completion(
                     if (
                         form_data.get('params', {}).get('function_calling') == 'native'
                         or model_info_params.get('function_calling') == 'native'
+                    or (codex_cli_provider and not codex_cli_image_generation)
                     )
                     else 'default'
                 ),
@@ -1891,7 +1936,7 @@ async def chat_completion(
                         ChatForm(
                             chat={
                                 'id': chat_id,
-                                'title': 'New Chat',
+                                'title': localized_new_chat_title,
                                 'models': list(message_ids.keys()),
                                 'history': {
                                     'currentId': all_assistant_ids[0] if all_assistant_ids else user_message_id,
@@ -2071,6 +2116,11 @@ async def chat_completion(
             raise  # re-raise to ensure proper task cancellation handling
         except Exception as e:
             error_detail = e.detail if isinstance(e, HTTPException) else str(e)
+            if 'Got more than' in error_detail and 'when reading:' in error_detail:
+                error_detail = (
+                    'Provider returned an oversized streamed chunk. '
+                    'The request likely produced a very large image or tool payload.'
+                )
             log.error('Error processing chat payload: %s', error_detail)
             if metadata.get('chat_id') and metadata.get('message_id'):
                 # Update the chat message with the error

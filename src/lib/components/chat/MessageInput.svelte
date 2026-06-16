@@ -15,8 +15,6 @@
 
 	import { createPicker, getAuthToken } from '$lib/utils/google-drive-picker';
 	import { pickAndDownloadFile } from '$lib/utils/onedrive-file-picker';
-	import { KokoroWorker } from '$lib/workers/KokoroWorker';
-
 	const dispatch = createEventDispatcher();
 
 	import {
@@ -31,10 +29,7 @@
 		toolServers,
 		terminalServers,
 		user as _user,
-		showControls,
-		showSettings,
 		selectedTerminalId,
-		TTSWorker,
 		temporaryChatEnabled
 	} from '$lib/stores';
 
@@ -81,19 +76,20 @@
 
 	import XMark from '../icons/XMark.svelte';
 	import GlobeAlt from '../icons/GlobeAlt.svelte';
+	import LinkSlash from '../icons/LinkSlash.svelte';
 	import Photo from '../icons/Photo.svelte';
 	import Wrench from '../icons/Wrench.svelte';
 	import Keyframes from '../icons/Keyframes.svelte';
 	import Sparkles from '../icons/Sparkles.svelte';
 
 	import InputVariablesModal from './MessageInput/InputVariablesModal.svelte';
-	import Voice from '../icons/Voice.svelte';
-	import Terminal from '../icons/Terminal.svelte';
 	import IntegrationsMenu from './MessageInput/IntegrationsMenu.svelte';
 	import TerminalMenu from './MessageInput/TerminalMenu.svelte';
 	import Component from '../icons/Component.svelte';
 	import PlusAlt from '../icons/PlusAlt.svelte';
 	import Dropdown from '../common/Dropdown.svelte';
+	import Check from '../icons/Check.svelte';
+	import ChevronDown from '../icons/ChevronDown.svelte';
 
 	import CommandSuggestionList from './MessageInput/CommandSuggestionList.svelte';
 	import Knobs from '../icons/Knobs.svelte';
@@ -133,6 +129,9 @@
 
 	export let prompt = '';
 	export let files = [];
+	export let params = {};
+
+	$: hasInputContent = prompt.trim().length > 0 || files.length > 0;
 
 	export let selectedToolIds = [];
 	export let selectedSkillIds = [];
@@ -140,6 +139,7 @@
 
 	export let imageGenerationEnabled = false;
 	export let webSearchEnabled = false;
+	export let deepWebSearchEnabled = false;
 	export let codeInterpreterEnabled = false;
 
 	export let pendingOAuthTools = [];
@@ -185,8 +185,12 @@
 		selectedFilterIds,
 		imageGenerationEnabled,
 		webSearchEnabled,
-		codeInterpreterEnabled
+		deepWebSearchEnabled
 	});
+
+	$: if (!webSearchEnabled && deepWebSearchEnabled) {
+		deepWebSearchEnabled = false;
+	}
 
 	const inputVariableHandler = async (text: string): Promise<string> => {
 		inputVariables = extractInputVariables(text);
@@ -457,6 +461,144 @@
 
 	let chatInputContainerElement;
 	let chatInputElement;
+	let inputLayoutElement;
+	let inputControlsLeftElement;
+	let inputControlsRightElement;
+	let compactInputLayout = true;
+	let inputLayoutFrame: number | null = null;
+	let inputTextMeasureCanvas: HTMLCanvasElement | null = null;
+	let compactInputWrapLockLength: number | null = null;
+	const COMPACT_INPUT_MAX_LINE_LENGTH = 88;
+
+	const getChatInputEditorElement = () =>
+		(chatInputContainerElement?.querySelector?.('.ProseMirror') ??
+			chatInputContainerElement?.querySelector?.('[contenteditable="true"]') ??
+			chatInputContainerElement) as HTMLElement | null;
+
+	const getSingleLineInputHeight = () => {
+		const editorElement = getChatInputEditorElement();
+		if (!editorElement) {
+			return 24;
+		}
+
+		const style = window.getComputedStyle(editorElement);
+		const lineHeight = Number.parseFloat(style.lineHeight);
+
+		return Number.isFinite(lineHeight)
+			? lineHeight + Number.parseFloat(style.paddingTop || '0') + Number.parseFloat(style.paddingBottom || '0')
+			: 24;
+	};
+
+	const getPromptTextWidth = () => {
+		const text = prompt.split('\n').reduce((longest, line) => {
+			return line.length > longest.length ? line : longest;
+		}, '');
+
+		if (!text) {
+			return 0;
+		}
+
+		if (!inputTextMeasureCanvas) {
+			inputTextMeasureCanvas = document.createElement('canvas');
+		}
+
+		const context = inputTextMeasureCanvas.getContext('2d');
+		if (!context) {
+			return text.length * 8.5;
+		}
+
+		const styleSource = getChatInputEditorElement();
+		if (!styleSource) {
+			return text.length * 8.5;
+		}
+
+		const style = window.getComputedStyle(styleSource);
+		context.font = `${style.fontStyle} ${style.fontVariant} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+
+		return context.measureText(text).width;
+	};
+
+	const shouldUseCompactInputLayout = () => {
+		if (files.length > 0 || atSelectedModel !== undefined) {
+			compactInputWrapLockLength = null;
+			return false;
+		}
+
+		if (prompt.trim().length === 0) {
+			compactInputWrapLockLength = null;
+			return true;
+		}
+
+		if (prompt.includes('\n')) {
+			compactInputWrapLockLength = null;
+			return false;
+		}
+
+		const longestLineLength = prompt.split('\n').reduce((max, line) => Math.max(max, line.length), 0);
+		if (longestLineLength >= COMPACT_INPUT_MAX_LINE_LENGTH) {
+			compactInputWrapLockLength = longestLineLength;
+			return false;
+		}
+
+		const layoutWidth = inputLayoutElement?.getBoundingClientRect().width ?? 0;
+		const leftWidth = inputControlsLeftElement?.getBoundingClientRect().width ?? 0;
+		const rightWidth = inputControlsRightElement?.getBoundingClientRect().width ?? 0;
+
+		if (layoutWidth === 0) {
+			return compactInputLayout;
+		}
+
+		const availableTextWidth = layoutWidth - leftWidth - rightWidth - 24;
+		const promptTextWidth = getPromptTextWidth();
+		const editorElement = getChatInputEditorElement();
+		const editorHeight = editorElement?.scrollHeight ?? editorElement?.getBoundingClientRect().height ?? 0;
+		const singleLineHeight = getSingleLineInputHeight();
+
+		if (compactInputLayout && editorHeight > singleLineHeight + 8) {
+			compactInputWrapLockLength = longestLineLength;
+			return false;
+		}
+
+		const compactThreshold = Math.max(120, availableTextWidth - 40);
+		const expandedThreshold = Math.max(120, availableTextWidth - 160);
+
+		if (!compactInputLayout && compactInputWrapLockLength !== null) {
+			if (longestLineLength >= compactInputWrapLockLength - 12) {
+				return false;
+			}
+
+			compactInputWrapLockLength = null;
+		}
+
+		return promptTextWidth <= (compactInputLayout ? compactThreshold : expandedThreshold);
+	};
+
+	const scheduleInputLayoutUpdate = () => {
+		if (typeof window === 'undefined') {
+			return;
+		}
+
+		if (inputLayoutFrame !== null) {
+			window.cancelAnimationFrame(inputLayoutFrame);
+		}
+
+		inputLayoutFrame = window.requestAnimationFrame(() => {
+			inputLayoutFrame = null;
+			compactInputLayout = shouldUseCompactInputLayout();
+		});
+	};
+
+	const onInputLayoutResize = () => {
+		scheduleInputLayoutUpdate();
+	};
+
+	$: {
+		prompt;
+		files.length;
+		atSelectedModel;
+		loaded;
+		scheduleInputLayoutUpdate();
+	}
 
 	let filesInputElement;
 	let commandsElement;
@@ -486,20 +628,156 @@
 		(model) => $models.find((m) => m.id === model)?.info?.meta?.capabilities?.web_search ?? true
 	);
 
+	const CODEX_CLI_PROVIDER = 'codex_cli';
+
+	const getModelProvider = (model: Model | undefined) =>
+		(model?.provider ?? (model as any)?.openai?.provider ?? '') as string;
+
+	let currentModelIds = [];
+	let currentModels = [];
+	let availableChatModels = [];
+	let codexCliModels = [];
+	let codexCliWebSearchMode = false;
+	const REASONING_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'] as const;
+	const DEFAULT_REASONING_DISABLED_TOOLTIP = 'бля, ну не наглей ты';
+
+	const formatMultiplier = (value: unknown) => {
+		if (value === null || value === undefined || value === '') return '';
+		const number = Number(value);
+
+		return Number.isFinite(number) ? `${Number.parseFloat(String(number))}x` : '';
+	};
+
+	const ceilToSingleDecimal = (value: number) =>
+		Math.ceil((value + Number.EPSILON) * 10) / 10;
+
+	const getModelMeta = (model: Model | undefined) =>
+		((model as any)?.info?.meta ?? (model as any)?.meta ?? {}) as Record<string, any>;
+
+	const getModelUsageMultiplierValue = (model: Model | undefined) => {
+		const value = getModelMeta(model)?.usage_multiplier;
+		const number = Number(value);
+
+		return Number.isFinite(number) ? number : null;
+	};
+
+	const getReasoningEffortSettings = (model: Model | undefined) =>
+		(getModelMeta(model)?.reasoning_effort_settings ?? {}) as Record<string, any>;
+
+	const getReasoningEffortAvailableLevels = (model: Model | undefined) => {
+		const available = getReasoningEffortSettings(model)?.available;
+		if (!Array.isArray(available)) return [...REASONING_EFFORT_LEVELS];
+
+		return available.filter((level) =>
+			REASONING_EFFORT_LEVELS.includes(level as (typeof REASONING_EFFORT_LEVELS)[number])
+		);
+	};
+
+	const getReasoningEffortMultiplier = (
+		level: (typeof REASONING_EFFORT_LEVELS)[number],
+		modelList: Model[]
+	) => {
+		const multiplier = modelList
+			.map((model) => {
+				const reasoningMultiplier = Number(getReasoningEffortSettings(model)?.multipliers?.[level]);
+
+				if (!Number.isFinite(reasoningMultiplier)) {
+					return null;
+				}
+
+				const modelMultiplier = getModelUsageMultiplierValue(model) ?? 1;
+				return `${ceilToSingleDecimal(modelMultiplier * reasoningMultiplier).toFixed(1)}x`;
+			})
+			.find((value) => value !== null);
+
+		return multiplier ?? '';
+	};
+
+	const getReasoningEffortLabel = (
+		level: (typeof REASONING_EFFORT_LEVELS)[number],
+		modelList: Model[]
+	) => {
+		const multiplier = getReasoningEffortMultiplier(level, modelList);
+		return multiplier ? `${level} (${multiplier})` : level;
+	};
+
+	const isReasoningEffortAllowed = (
+		level: (typeof REASONING_EFFORT_LEVELS)[number],
+		modelList: Model[]
+	) => modelList.every((model) => getReasoningEffortAvailableLevels(model).includes(level));
+
+	const getReasoningEffortDisabledTooltip = (
+		level: (typeof REASONING_EFFORT_LEVELS)[number],
+		modelList: Model[]
+	) =>
+		modelList
+			.map((model) =>
+				getReasoningEffortAvailableLevels(model).includes(level)
+					? ''
+					: (getReasoningEffortSettings(model)?.disabled_tooltip ??
+						DEFAULT_REASONING_DISABLED_TOOLTIP)
+			)
+			.find((tooltip) => tooltip) ?? DEFAULT_REASONING_DISABLED_TOOLTIP;
+
+	$: {
+		currentModelIds = (atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).filter(
+			(modelId) => modelId
+		);
+		currentModels = currentModelIds
+			.map((modelId) => $models.find((model) => model.id === modelId))
+			.filter((model) => model !== undefined);
+		availableChatModels = $models.filter(
+			(model) =>
+				model.id &&
+				model.id !== '' &&
+				model.info?.meta?.capabilities?.web_search !== false &&
+				model.owned_by !== 'arena'
+		);
+		codexCliModels = currentModels.filter(
+			(model) => getModelProvider(model) === CODEX_CLI_PROVIDER
+		);
+
+		if (currentModelIds.length > 0) {
+			codexCliWebSearchMode =
+				currentModels.length === currentModelIds.length &&
+				codexCliModels.length === currentModelIds.length;
+		} else {
+			codexCliWebSearchMode =
+				availableChatModels.length > 0 &&
+				availableChatModels.every((model) => getModelProvider(model) === CODEX_CLI_PROVIDER);
+		}
+	}
+
+	$: if (codexCliWebSearchMode) {
+		deepWebSearchEnabled = false;
+	}
+
+	$: selectedReasoningEffort =
+		typeof params?.reasoning_effort === 'string' &&
+		REASONING_EFFORT_LEVELS.includes(params.reasoning_effort as (typeof REASONING_EFFORT_LEVELS)[number])
+			? params.reasoning_effort
+			: null;
+
+	let selectedReasoningEffort: string | null = null;
+	let activeReasoningEffort: string = 'medium';
+
+	$: activeReasoningEffort = selectedReasoningEffort ?? 'medium';
+
+	const setReasoningEffort = (level: (typeof REASONING_EFFORT_LEVELS)[number]) => {
+		if (!isReasoningEffortAllowed(level, currentModels)) return;
+
+		params = {
+			...params,
+			reasoning_effort: level
+		};
+	};
+
 	let imageGenerationCapableModels = [];
 	$: imageGenerationCapableModels = (
 		atSelectedModel?.id ? [atSelectedModel.id] : selectedModels
 	).filter(
 		(model) =>
 			$models.find((m) => m.id === model)?.info?.meta?.capabilities?.image_generation ?? true
-	);
-
-	let codeInterpreterCapableModels = [];
-	$: codeInterpreterCapableModels = (
-		atSelectedModel?.id ? [atSelectedModel.id] : selectedModels
-	).filter(
-		(model) =>
-			$models.find((m) => m.id === model)?.info?.meta?.capabilities?.code_interpreter ?? true
 	);
 
 	let terminalCapableModels = [];
@@ -520,8 +798,7 @@
 
 	let showWebSearchButton = false;
 	$: showWebSearchButton =
-		(atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).length ===
-			webSearchCapableModels.length &&
+		currentModelIds.length === webSearchCapableModels.length &&
 		$config?.features?.enable_web_search &&
 		($_user.role === 'admin' || $_user?.permissions?.features?.web_search);
 
@@ -531,19 +808,6 @@
 			imageGenerationCapableModels.length &&
 		$config?.features?.enable_image_generation &&
 		($_user.role === 'admin' || $_user?.permissions?.features?.image_generation);
-
-	let showCodeInterpreterButton = false;
-	$: showCodeInterpreterButton =
-		!$selectedTerminalId &&
-		(atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).length ===
-			codeInterpreterCapableModels.length &&
-		$config?.features?.enable_code_interpreter &&
-		($_user.role === 'admin' || $_user?.permissions?.features?.code_interpreter);
-
-	// Disable code interpreter when terminal is active (mutually exclusive)
-	$: if ($selectedTerminalId && codeInterpreterEnabled) {
-		codeInterpreterEnabled = false;
-	}
 
 	// Clear selected terminal when model doesn't support terminal
 	$: if ($selectedTerminalId && terminalCapableModels.length === 0) {
@@ -1088,8 +1352,13 @@
 			chatInput?.focus();
 		}, 0);
 
+		tick().then(() => {
+			scheduleInputLayoutUpdate();
+		});
+
 		window.addEventListener('keydown', onKeyDown);
 		window.addEventListener('keyup', onKeyUp);
+		window.addEventListener('resize', onInputLayoutResize);
 
 		window.addEventListener('focus', onFocus);
 		window.addEventListener('blur', onBlur);
@@ -1120,6 +1389,12 @@
 
 			window.removeEventListener('focus', onFocus);
 			window.removeEventListener('blur', onBlur);
+
+			if (inputLayoutFrame !== null) {
+				window.cancelAnimationFrame(inputLayoutFrame);
+			}
+
+			window.removeEventListener('resize', onInputLayoutResize);
 
 			if (dropzoneElement) {
 				dropzoneElement.removeEventListener('dragover', onDragOver, true);
@@ -1167,12 +1442,10 @@
 />
 
 {#if loaded}
-	<div class="w-full font-primary">
-		<div class=" mx-auto inset-x-0 bg-transparent flex justify-center">
+		<div class="w-full font-primary">
+			<div class=" mx-auto inset-x-0 bg-transparent flex justify-center">
 			<div
-				class="flex flex-col px-3 {($settings?.widescreenMode ?? null)
-					? 'max-w-full'
-					: 'max-w-6xl'} w-full"
+				class="flex flex-col px-1 max-w-[48rem] w-full"
 			>
 				<div class="relative">
 					{#if autoScroll === false && history?.currentId}
@@ -1207,9 +1480,7 @@
 
 		<div class="bg-transparent">
 			<div
-				class="{($settings?.widescreenMode ?? null)
-					? 'max-w-full'
-					: 'max-w-6xl'} px-2.5 mx-auto inset-x-0"
+				class="max-w-[48rem] px-0.5 mx-auto inset-x-0"
 			>
 				<div class="">
 					<input
@@ -1261,12 +1532,14 @@
 							// check if selectedModels support image input
 							dispatch('submit', prompt);
 						}}
-					>
-						<button
-							id="generate-message-pair-button"
-							class="hidden"
-							on:click={() => createMessagePair(prompt)}
-						/>
+						>
+							<button
+								id="generate-message-pair-button"
+								class="hidden"
+								type="button"
+								aria-label="Generate message pair"
+								on:click={() => createMessagePair(prompt)}
+							></button>
 
 						<!-- Task list display -->
 						{#if isActive && chatTasks.length > 0}
@@ -1295,9 +1568,9 @@
 
 						<div
 							id="message-input-container"
-							class="flex-1 flex flex-col relative w-full shadow-lg rounded-3xl border {$temporaryChatEnabled
+							class="flex-1 flex flex-col relative w-full shadow-lg rounded-[2rem] border {$temporaryChatEnabled
 								? 'border-dashed border-gray-100 dark:border-gray-800 hover:border-gray-200 focus-within:border-gray-200 hover:dark:border-gray-700 focus-within:dark:border-gray-700'
-								: ' border-gray-100/30 dark:border-gray-850/30 hover:border-gray-200 focus-within:border-gray-100 hover:dark:border-gray-800 focus-within:dark:border-gray-800'}  transition px-1 bg-white/5 dark:bg-gray-500/5 backdrop-blur-sm dark:text-gray-100"
+								: ' border-gray-100/30 dark:border-gray-850/30 hover:border-gray-200 focus-within:border-gray-100 hover:dark:border-gray-800 focus-within:dark:border-gray-800'}  transition px-1 bg-white/5 dark:bg-[#2a2a2a] backdrop-blur-sm dark:text-gray-100"
 							dir={$settings?.chatDirection ?? 'auto'}
 						>
 							{#if atSelectedModel !== undefined}
@@ -1422,204 +1695,23 @@
 								</div>
 							{/if}
 
-							<div class="px-2.5">
+							<div
+								bind:this={inputLayoutElement}
+								class="relative min-w-0 w-full {compactInputLayout
+									? 'px-2 py-1 min-h-[2.75rem] flex items-center gap-1'
+									: hasInputContent
+									? 'px-2.5 pt-2 pb-2 min-h-[6.25rem] flex flex-col'
+									: 'px-2.5 pt-1.5 pb-1.5 min-h-[3.75rem] flex flex-col'}"
+							>
 								<div
-									class="scrollbar-hidden rtl:text-right ltr:text-left bg-transparent dark:text-gray-100 outline-hidden w-full pb-1 px-1 resize-none h-fit max-h-96 overflow-auto {files.length ===
-									0
-										? atSelectedModel !== undefined
-											? 'pt-1.5'
-											: 'pt-2.5'
-										: ''}"
-									id="chat-input-container"
-								>
-									{#if prompt.split('\n').length > 2}
-										<div class="fixed top-0 right-0 z-20">
-											<div class="mt-2.5 mr-3">
-												<button
-													type="button"
-													class="p-1 rounded-lg hover:bg-gray-100/50 dark:hover:bg-gray-800/50"
-													aria-label="Expand input"
-													on:click={async () => {
-														showInputModal = true;
-													}}
-												>
-													<Expand />
-												</button>
-											</div>
-										</div>
-									{/if}
-
-									{#if suggestions}
-										{#key $settings?.richTextInput ?? true}
-											{#key $settings?.showFormattingToolbar ?? false}
-												<RichTextInput
-													bind:this={chatInputElement}
-													id="chat-input"
-													editable={!showInputModal}
-													onChange={(content) => {
-														prompt = content.md;
-														inputContent = content;
-														command = getCommand();
-													}}
-													json={true}
-													richText={$settings?.richTextInput ?? true}
-													messageInput={true}
-													showFormattingToolbar={$settings?.showFormattingToolbar ?? false}
-													floatingMenuPlacement={'top-start'}
-													insertPromptAsRichText={$settings?.insertPromptAsRichText ?? false}
-													shiftEnter={!($settings?.ctrlEnterToSend ?? false) &&
-														!$mobile &&
-														!(
-															'ontouchstart' in window ||
-															navigator.maxTouchPoints > 0 ||
-															navigator.msMaxTouchPoints > 0
-														)}
-													placeholder={placeholder ? placeholder : $i18n.t('Send a Message')}
-													largeTextAsFile={($settings?.largeTextAsFile ?? true) && !shiftKey}
-													autocomplete={$config?.features?.enable_autocomplete_generation &&
-														($settings?.promptAutocomplete ?? false)}
-													generateAutoCompletion={async (text) => {
-														if (selectedModelIds.length === 0 || !selectedModelIds.at(0)) {
-															toast.error($i18n.t('Please select a model first.'));
-														}
-
-														const res = await generateAutoCompletion(
-															localStorage.token,
-															selectedModelIds.at(0),
-															text,
-															history?.currentId
-																? createMessagesList(history, history.currentId)
-																: null
-														).catch((error) => {
-															console.log(error);
-
-															return null;
-														});
-
-														console.log(res);
-														return res;
-													}}
-													{suggestions}
-													oncompositionstart={() => (isComposing = true)}
-													oncompositionend={(e) => {
-														compositionEndedAt = e.timeStamp;
-														isComposing = false;
-													}}
-													on:keydown={async (e) => {
-														e = e.detail.event;
-
-														const isCtrlPressed = e.ctrlKey || e.metaKey; // metaKey is for Cmd key on Mac
-														const suggestionsContainerElement =
-															document.getElementById('suggestions-container');
-
-														if (e.key === 'Escape') {
-															stopResponse();
-														}
-
-														if (prompt === '' && e.key == 'ArrowUp') {
-															e.preventDefault();
-
-															const userMessageElement = [
-																...document.getElementsByClassName('user-message')
-															]?.at(-1);
-
-															if (userMessageElement) {
-																userMessageElement.scrollIntoView({ block: 'center' });
-																const editButton = [
-																	...document.getElementsByClassName('edit-user-message-button')
-																]?.at(-1);
-
-																editButton?.click();
-															}
-														}
-
-														if (!suggestionsContainerElement) {
-															if (
-																!$mobile ||
-																!(
-																	'ontouchstart' in window ||
-																	navigator.maxTouchPoints > 0 ||
-																	navigator.msMaxTouchPoints > 0
-																)
-															) {
-																if (inOrNearComposition(e)) {
-																	return;
-																}
-
-																// Uses keyCode '13' for Enter key for chinese/japanese keyboards.
-																//
-																// Depending on the user's settings, it will send the message
-																// either when Enter is pressed or when Ctrl+Enter is pressed.
-																const enterPressed =
-																	($settings?.ctrlEnterToSend ?? false)
-																		? (e.key === 'Enter' || e.keyCode === 13) && isCtrlPressed
-																		: (e.key === 'Enter' || e.keyCode === 13) && !e.shiftKey;
-
-																if (enterPressed) {
-																	e.preventDefault();
-																	if (prompt !== '' || files.length > 0) {
-																		dispatch('submit', prompt);
-																	}
-																}
-															}
-														}
-
-														if (e.key === 'Escape') {
-															console.log('Escape');
-															atSelectedModel = undefined;
-															selectedToolIds = [];
-															selectedFilterIds = [];
-
-															webSearchEnabled = false;
-															imageGenerationEnabled = false;
-															codeInterpreterEnabled = false;
-														}
-													}}
-													on:paste={async (e) => {
-														e = e.detail.event;
-														console.log(e);
-
-														const clipboardData = e.clipboardData || window.clipboardData;
-
-														if (clipboardData && clipboardData.items) {
-															for (const item of clipboardData.items) {
-																if (item.type === 'text/plain') {
-																	if (($settings?.largeTextAsFile ?? true) && !shiftKey) {
-																		const text = clipboardData.getData('text/plain');
-
-																		if (text.length > PASTED_TEXT_CHARACTER_LIMIT) {
-																			e.preventDefault();
-																			const blob = new Blob([text], { type: 'text/plain' });
-																			const file = new File(
-																				[blob],
-																				`Pasted_Text_${Date.now()}.txt`,
-																				{
-																					type: 'text/plain'
-																				}
-																			);
-
-																			await uploadFileHandler(file, true, { context: 'full' });
-																		}
-																	}
-																} else {
-																	const file = item.getAsFile();
-																	if (file) {
-																		await inputFilesHandler([file]);
-																		e.preventDefault();
-																	}
-																}
-															}
-														}
-													}}
-												/>
-											{/key}
-										{/key}
-									{/if}
-								</div>
-							</div>
-
-							<div class=" flex justify-between mt-0.5 mb-2.5 mx-0.5 max-w-full" dir="ltr">
-								<div class="ml-1 self-end flex items-center flex-1 max-w-[80%]">
+									class="{compactInputLayout
+										? 'z-10 flex shrink-0 items-center'
+										: 'absolute bottom-1.5 left-2.5 z-10 flex shrink-0 items-end'}"
+									>
+										<div
+											bind:this={inputControlsLeftElement}
+											class="flex items-end gap-0.5 min-w-0 max-w-[14rem] overflow-x-auto scrollbar-hidden"
+										>
 									<InputMenu
 										bind:files
 										selectedModels={atSelectedModel ? [atSelectedModel.id] : selectedModels}
@@ -1682,23 +1774,19 @@
 										</button>
 									</InputMenu>
 
-									{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
-										<div
-											class="flex self-center w-[1px] h-4 mx-1 bg-gray-200/50 dark:bg-gray-800/50"
-										/>
-
+									{#if showWebSearchButton || showImageGenerationButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
 										<IntegrationsMenu
 											selectedModels={atSelectedModel ? [atSelectedModel.id] : selectedModels}
 											{toggleFilters}
 											{showWebSearchButton}
 											{showImageGenerationButton}
-											{showCodeInterpreterButton}
+											{codexCliWebSearchMode}
 											bind:selectedToolIds
 											bind:selectedSkillIds
 											bind:selectedFilterIds
 											bind:webSearchEnabled
+											bind:deepWebSearchEnabled
 											bind:imageGenerationEnabled
-											bind:codeInterpreterEnabled
 											closeOnOutsideClick={integrationsMenuCloseOnOutsideClick}
 											onShowValves={(e) => {
 												const { type, id } = e;
@@ -1744,7 +1832,7 @@
 										</div>
 									{/if}
 
-									<div class="ml-1 flex gap-1.5">
+									<div class="ml-0 flex items-center gap-0.5">
 										{#if (selectedToolIds ?? []).length > 0}
 											<Tooltip
 												content={$i18n.t('{{COUNT}} Available Tools', {
@@ -1851,11 +1939,16 @@
 											{/if}
 										{/each}
 
-										{#if webSearchEnabled}
-											<Tooltip content={$i18n.t('Web Search')} placement="top">
-												<button
-													on:click|preventDefault={() => (webSearchEnabled = !webSearchEnabled)}
-													type="button"
+											{#if webSearchEnabled && !codexCliWebSearchMode}
+												<Tooltip content={$i18n.t('Web Search')} placement="top">
+													<button
+														on:click|preventDefault={() => {
+															webSearchEnabled = !webSearchEnabled;
+															if (!webSearchEnabled) {
+																deepWebSearchEnabled = false;
+															}
+														}}
+														type="button"
 													class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {webSearchEnabled ||
 													($settings?.webSearch ?? false) === 'always'
 														? ' text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20'
@@ -1887,32 +1980,6 @@
 											</Tooltip>
 										{/if}
 
-										{#if codeInterpreterEnabled}
-											<Tooltip content={$i18n.t('Code Interpreter')} placement="top">
-												<button
-													aria-label={codeInterpreterEnabled
-														? $i18n.t('Disable Code Interpreter')
-														: $i18n.t('Enable Code Interpreter')}
-													aria-pressed={codeInterpreterEnabled}
-													on:click|preventDefault={() =>
-														(codeInterpreterEnabled = !codeInterpreterEnabled)}
-													type="button"
-													class=" group p-[7px] flex gap-1.5 items-center text-sm transition-colors duration-300 max-w-full overflow-hidden {codeInterpreterEnabled
-														? ' text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-700/10 border border-sky-200/40 dark:border-sky-500/20'
-														: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '} {($settings?.highContrastMode ??
-													false)
-														? 'm-1'
-														: 'focus:outline-hidden rounded-full'}"
-												>
-													<Terminal className="size-3.5" strokeWidth="2" />
-
-													<div class="hidden group-hover:block">
-														<XMark className="size-4" strokeWidth="1.75" />
-													</div>
-												</button>
-											</Tooltip>
-										{/if}
-
 										{#each pendingOAuthTools as pendingTool (pendingTool.id)}
 											<Tooltip content={$i18n.t('Click to connect')} placement="top">
 												<button
@@ -1933,10 +2000,271 @@
 												</button>
 											</Tooltip>
 										{/each}
+										</div>
 									</div>
 								</div>
 
-								<div class="self-end flex space-x-1 mr-1 shrink-0 gap-[0.5px]">
+									<div
+										class="{compactInputLayout
+										? 'min-w-0 flex-1'
+										: 'flex min-w-0 w-full flex-1 flex-col justify-between gap-1'}"
+									dir="ltr"
+								>
+									<div
+										bind:this={chatInputContainerElement}
+										class="scrollbar-hidden rtl:text-right ltr:text-left bg-transparent dark:text-gray-100 outline-hidden w-full min-w-0 flex px-0.5 resize-none h-fit max-h-96 overflow-auto {compactInputLayout
+											? 'items-center min-h-0 pt-0 pb-0'
+											: hasInputContent
+											? 'min-h-[3.5rem] pt-0.5 pb-0.5'
+											: 'min-h-0 pt-0 pb-0'} {files.length ===
+										0
+											? atSelectedModel !== undefined
+												? 'pt-0'
+												: 'pt-0.5'
+											: ''}"
+										id="chat-input-container"
+									>
+										{#if prompt.split('\n').length > 2}
+											<div class="fixed top-0 right-0 z-20">
+												<div class="mt-2.5 mr-3">
+													<button
+														type="button"
+														class="p-1 rounded-lg hover:bg-gray-100/50 dark:hover:bg-gray-800/50"
+														aria-label="Expand input"
+														on:click={async () => {
+															showInputModal = true;
+														}}
+													>
+														<Expand />
+													</button>
+												</div>
+											</div>
+										{/if}
+
+										{#if suggestions}
+											{#key $settings?.richTextInput ?? true}
+												{#key $settings?.showFormattingToolbar ?? false}
+													<RichTextInput
+														bind:this={chatInputElement}
+														id="chat-input"
+														editable={!showInputModal}
+														onChange={(content) => {
+															prompt = content.md;
+															inputContent = content;
+															command = getCommand();
+														}}
+														json={true}
+														richText={$settings?.richTextInput ?? true}
+														messageInput={true}
+														showFormattingToolbar={$settings?.showFormattingToolbar ?? false}
+														floatingMenuPlacement={'top-start'}
+														insertPromptAsRichText={$settings?.insertPromptAsRichText ?? false}
+														shiftEnter={!($settings?.ctrlEnterToSend ?? false) &&
+															!$mobile &&
+															!(
+																'ontouchstart' in window ||
+																navigator.maxTouchPoints > 0 ||
+																navigator.msMaxTouchPoints > 0
+															)}
+														placeholder={placeholder ? placeholder : $i18n.t('Send a Message')}
+														largeTextAsFile={($settings?.largeTextAsFile ?? true) && !shiftKey}
+														className="input-prose min-h-fit h-full text-[15px]"
+														autocomplete={$config?.features?.enable_autocomplete_generation &&
+															($settings?.promptAutocomplete ?? false)}
+														generateAutoCompletion={async (text) => {
+															if (selectedModelIds.length === 0 || !selectedModelIds.at(0)) {
+																toast.error($i18n.t('Please select a model first.'));
+															}
+
+															const res = await generateAutoCompletion(
+																localStorage.token,
+																selectedModelIds.at(0),
+																text,
+																history?.currentId
+																	? createMessagesList(history, history.currentId)
+																	: null
+															).catch((error) => {
+																console.log(error);
+
+																return null;
+															});
+
+															console.log(res);
+															return res;
+														}}
+														{suggestions}
+														oncompositionstart={() => (isComposing = true)}
+														oncompositionend={(e) => {
+															compositionEndedAt = e.timeStamp;
+															isComposing = false;
+														}}
+														on:keydown={async (e) => {
+															e = e.detail.event;
+
+															const isCtrlPressed = e.ctrlKey || e.metaKey;
+															const suggestionsContainerElement =
+																document.getElementById('suggestions-container');
+
+															if (e.key === 'Escape') {
+																stopResponse();
+															}
+
+															if (prompt === '' && e.key == 'ArrowUp') {
+																e.preventDefault();
+
+																const userMessageElement = [
+																	...document.getElementsByClassName('user-message')
+																]?.at(-1);
+
+																if (userMessageElement) {
+																	userMessageElement.scrollIntoView({ block: 'center' });
+																	const editButton = [
+																		...document.getElementsByClassName('edit-user-message-button')
+																	]?.at(-1);
+
+																	editButton?.click();
+																}
+															}
+
+															if (!suggestionsContainerElement) {
+																if (
+																	!$mobile ||
+																	!(
+																		'ontouchstart' in window ||
+																		navigator.maxTouchPoints > 0 ||
+																		navigator.msMaxTouchPoints > 0
+																	)
+																) {
+																	if (inOrNearComposition(e)) {
+																		return;
+																	}
+
+																	const enterPressed =
+																		($settings?.ctrlEnterToSend ?? false)
+																			? (e.key === 'Enter' || e.keyCode === 13) && isCtrlPressed
+																			: (e.key === 'Enter' || e.keyCode === 13) && !e.shiftKey;
+
+																	if (enterPressed) {
+																		e.preventDefault();
+																		if (prompt !== '' || files.length > 0) {
+																			dispatch('submit', prompt);
+																		}
+																	}
+																}
+															}
+
+															if (e.key === 'Escape') {
+																console.log('Escape');
+																atSelectedModel = undefined;
+																selectedToolIds = [];
+																selectedFilterIds = [];
+
+																webSearchEnabled = false;
+																imageGenerationEnabled = false;
+																codeInterpreterEnabled = false;
+															}
+														}}
+														on:paste={async (e) => {
+															e = e.detail.event;
+															console.log(e);
+
+															const clipboardData = e.clipboardData || window.clipboardData;
+
+															if (clipboardData && clipboardData.items) {
+																for (const item of clipboardData.items) {
+																	if (item.type === 'text/plain') {
+																		if (($settings?.largeTextAsFile ?? true) && !shiftKey) {
+																			const text = clipboardData.getData('text/plain');
+
+																			if (text.length > PASTED_TEXT_CHARACTER_LIMIT) {
+																				e.preventDefault();
+																				const blob = new Blob([text], { type: 'text/plain' });
+																				const file = new File(
+																					[blob],
+																					`Pasted_Text_${Date.now()}.txt`,
+																					{
+																						type: 'text/plain'
+																					}
+																				);
+
+																				await uploadFileHandler(file, true, {
+																					context: 'full'
+																				});
+																			}
+																		}
+																	} else {
+																		const file = item.getAsFile();
+																		if (file) {
+																			await inputFilesHandler([file]);
+																			e.preventDefault();
+																		}
+																	}
+																}
+															}
+														}}
+													/>
+												{/key}
+											{/key}
+										{/if}
+									</div>
+								</div>
+
+									<div
+										class="{compactInputLayout
+											? 'z-10 flex min-w-fit shrink-0 justify-end'
+											: 'flex justify-end min-w-0 w-full'}"
+									>
+								<div bind:this={inputControlsRightElement} class="flex items-center shrink-0 gap-0.5">
+									{#if codexCliModels.length > 0 && codexCliModels.length === currentModels.length}
+										<Dropdown align="end" sideOffset={4}>
+											<Tooltip content={$i18n.t('Reasoning Effort')} placement="top">
+												<button
+													type="button"
+													id="reasoning-effort-menu-button"
+													class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full h-8 pl-3 pr-2 flex items-center gap-1.5 outline-hidden focus:outline-hidden text-[15px] font-medium"
+													aria-label={$i18n.t('Reasoning Effort')}
+												>
+													<span>{selectedReasoningEffort ?? 'medium'}</span>
+													<ChevronDown className="size-3.5 text-gray-500 dark:text-gray-400" />
+												</button>
+											</Tooltip>
+
+											<div slot="content">
+												<div
+													class="min-w-[160px] rounded-2xl p-1 z-[9999999] bg-white dark:bg-gray-850 dark:text-white shadow-lg border border-gray-100 dark:border-gray-800"
+												>
+													{#each REASONING_EFFORT_LEVELS as level}
+														{@const allowed = isReasoningEffortAllowed(level, currentModels)}
+														<Tooltip
+															content={allowed
+																? ''
+																: getReasoningEffortDisabledTooltip(level, currentModels)}
+															placement="top"
+														>
+															<button
+																type="button"
+																aria-disabled={!allowed}
+																class="select-none flex rounded-xl py-1.5 px-3 w-full transition items-center gap-2 text-[15px] {allowed
+																	? 'hover:bg-gray-50 dark:hover:bg-gray-800'
+																	: 'opacity-45 cursor-not-allowed'}"
+																on:click={() => {
+																	setReasoningEffort(level);
+																}}
+															>
+																<span class="flex-1 text-left"
+																	>{getReasoningEffortLabel(level, currentModels)}</span
+																>
+																{#if activeReasoningEffort === level}
+																	<Check className="size-3.5 text-gray-500 dark:text-gray-400" />
+																{/if}
+															</button>
+														</Tooltip>
+													{/each}
+												</div>
+											</div>
+										</Dropdown>
+									{/if}
+
 									{#if isActive && prompt === '' && files.length === 0}
 										<div class=" flex items-center">
 											<Tooltip content={$i18n.t('Stop')}>
@@ -1993,33 +2321,10 @@
 												<Tooltip content={$i18n.t('Dictate')}>
 													<button
 														id="voice-input-button"
-														class=" text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full p-1.5 self-center mr-0.5"
+													class=" text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full p-1.5 self-center"
 														type="button"
-														on:click={async () => {
-															try {
-																let stream = await navigator.mediaDevices
-																	.getUserMedia({ audio: true })
-																	.catch(function (err) {
-																		toast.error(
-																			$i18n.t(
-																				`Permission denied when accessing microphone: {{error}}`,
-																				{
-																					error: err
-																				}
-																			)
-																		);
-																		return null;
-																	});
-
-																if (stream) {
-																	recording = true;
-																	const tracks = stream.getTracks();
-																	tracks.forEach((track) => track.stop());
-																}
-																stream = null;
-															} catch {
-																toast.error($i18n.t('Permission denied when accessing microphone'));
-															}
+														on:click={() => {
+															recording = true;
 														}}
 														aria-label="Voice Input"
 													>
@@ -2036,69 +2341,64 @@
 														</svg>
 													</button>
 												</Tooltip>
+											{:else if codexCliWebSearchMode && !webSearchEnabled}
+												<Tooltip content={$i18n.t('Do not search the internet')} placement="top">
+													<button
+														on:click|preventDefault={() => {
+															webSearchEnabled = true;
+															deepWebSearchEnabled = false;
+														}}
+														type="button"
+														class="group px-2 py-[5px] flex gap-1.5 items-center text-xs rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden text-amber-600 dark:text-amber-400 bg-amber-50 hover:bg-amber-100 dark:bg-amber-400/10 dark:hover:bg-amber-600/10 border border-amber-200/40 dark:border-amber-500/20"
+													>
+														<LinkSlash className="size-3.5" strokeWidth="1.75" />
+														<span class="truncate">{$i18n.t('No Internet')}</span>
+														<div class="hidden group-hover:block">
+															<XMark className="size-4" strokeWidth="1.75" />
+														</div>
+													</button>
+												</Tooltip>
+											{/if}
+
+											{#if webSearchEnabled && deepWebSearchEnabled && !codexCliWebSearchMode}
+												<Tooltip content={$i18n.t('Deep Web Search')} placement="top">
+													<button
+														on:click|preventDefault={() =>
+															(deepWebSearchEnabled = !deepWebSearchEnabled)}
+														type="button"
+														class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20"
+													>
+														<Sparkles className="size-4" strokeWidth="1.75" />
+														<div class="hidden group-hover:block">
+															<XMark className="size-4" strokeWidth="1.75" />
+														</div>
+													</button>
+												</Tooltip>
 											{/if}
 										{/if}
 
-										{#if prompt === '' && files.length === 0 && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.call ?? true))}
+										{#if prompt === '' && files.length === 0}
 											<div class=" flex items-center">
-												<!-- {$i18n.t('Call')} -->
-												<Tooltip content={$i18n.t('Voice mode')}>
+												<Tooltip content={$i18n.t('Send message')}>
 													<button
-														class=" bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition rounded-full p-1.5 self-center"
-														type="button"
-														on:click={async () => {
-															if (selectedModels.length > 1) {
-																toast.error($i18n.t('Select only one model to call'));
-
-																return;
-															}
-
-															if ($config.audio.stt.engine === 'web') {
-																toast.error(
-																	$i18n.t('Call feature is not supported when using Web STT engine')
-																);
-
-																return;
-															}
-															// check if user has access to getUserMedia
-															try {
-																let stream = await navigator.mediaDevices.getUserMedia({
-																	audio: true
-																});
-																// If the user grants the permission, proceed to show the call overlay
-
-																if (stream) {
-																	const tracks = stream.getTracks();
-																	tracks.forEach((track) => track.stop());
-																}
-
-																stream = null;
-
-																if ($settings.audio?.tts?.engine === 'browser-kokoro') {
-																	// If the user has not initialized the TTS worker, initialize it
-																	if (!$TTSWorker) {
-																		await TTSWorker.set(
-																			new KokoroWorker({
-																				dtype: $settings.audio?.tts?.engineConfig?.dtype ?? 'fp32'
-																			})
-																		);
-
-																		await $TTSWorker.init();
-																	}
-																}
-
-																showCallOverlay.set(true);
-																showControls.set(true);
-															} catch (err) {
-																// If the user denies the permission or an error occurs, show an error message
-																toast.error(
-																	$i18n.t('Permission denied when accessing media devices')
-																);
-															}
-														}}
-														aria-label={$i18n.t('Voice mode')}
+														id="send-message-button"
+														class="text-white bg-gray-200 dark:text-gray-900 dark:bg-gray-700 disabled transition rounded-full p-1.5 self-center"
+														type="submit"
+														disabled={true}
+														aria-label={$i18n.t('Send message')}
 													>
-														<Voice className="size-5" strokeWidth="2.5" />
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															viewBox="0 0 16 16"
+															fill="currentColor"
+															class="size-5"
+														>
+															<path
+																fill-rule="evenodd"
+																d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z"
+																clip-rule="evenodd"
+															/>
+														</svg>
 													</button>
 												</Tooltip>
 											</div>
@@ -2138,17 +2438,17 @@
 											</div>
 										{/if}
 									{/if}
-								</div>
-							</div>
-						</div>
+										</div>
+											</div>
+										</div>
 
-						{#if $config?.license_metadata?.input_footer}
-							<div class=" text-xs text-gray-500 text-center line-clamp-1 marked">
-								{@html DOMPurify.sanitize(marked($config?.license_metadata?.input_footer))}
-							</div>
-						{:else}
-							<div class="mb-1" />
-						{/if}
+							{#if $config?.license_metadata?.input_footer}
+								<div class=" text-xs text-gray-500 text-center line-clamp-1 marked">
+									{@html DOMPurify.sanitize(marked($config?.license_metadata?.input_footer))}
+								</div>
+							{:else}
+								<div class="h-0"></div>
+							{/if}
 					</form>
 				</div>
 			</div>

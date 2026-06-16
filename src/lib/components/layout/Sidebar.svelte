@@ -107,6 +107,23 @@
 
 	$: pinnedItems = $settings?.pinnedMenuItems ?? DEFAULT_PINNED_ITEMS;
 
+	const getEffectivePinnedModelIds = () => {
+		const defaultPinnedModelIds = ($config?.default_pinned_models ?? '')
+			.split(',')
+			.filter((id) => id)
+			.filter((id) => $models.some((model) => model.id === id && !(model?.info?.meta?.hidden ?? false)));
+
+		if ($settings?.pinnedModelsCustomized === true) {
+			return ($settings?.pinnedModels ?? []).filter((id) =>
+				$models.some((model) => model.id === id && !(model?.info?.meta?.hidden ?? false))
+			);
+		}
+
+		return defaultPinnedModelIds;
+	};
+
+	$: showPinnedModels = getEffectivePinnedModelIds().length > 0;
+
 	const isMenuItemVisible = (id) => {
 		switch (id) {
 			case 'notes':
@@ -581,10 +598,7 @@
 				}
 			}),
 			settings.subscribe((value) => {
-				if (pinnedModels != value?.pinnedModels ?? []) {
-					pinnedModels = value?.pinnedModels ?? [];
-					showPinnedModels = pinnedModels.length > 0;
-				}
+				pinnedModels = value?.pinnedModels ?? [];
 			})
 		];
 
@@ -1194,7 +1208,7 @@
 					</div>
 				</div>
 
-				{#if ($models ?? []).length > 0 && (($settings?.pinnedModels ?? []).length > 0 || $config?.default_pinned_models)}
+				{#if ($models ?? []).length > 0 && showPinnedModels}
 					<Folder
 						id="sidebar-models"
 						bind:open={showPinnedModels}

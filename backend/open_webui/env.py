@@ -506,6 +506,28 @@ try:
 except (ValueError, TypeError):
     AIOHTTP_CLIENT_TIMEOUT = 300
 
+_aiohttp_read_bufsize_raw = os.getenv('AIOHTTP_CLIENT_READ_BUFSIZE', '')
+try:
+    AIOHTTP_CLIENT_READ_BUFSIZE = int(_aiohttp_read_bufsize_raw) if _aiohttp_read_bufsize_raw else 8 * 1024 * 1024
+except (ValueError, TypeError):
+    AIOHTTP_CLIENT_READ_BUFSIZE = 8 * 1024 * 1024
+
+_aiohttp_max_line_size_raw = os.getenv('AIOHTTP_CLIENT_MAX_LINE_SIZE', '')
+try:
+    AIOHTTP_CLIENT_MAX_LINE_SIZE = (
+        int(_aiohttp_max_line_size_raw) if _aiohttp_max_line_size_raw else 16 * 1024 * 1024
+    )
+except (ValueError, TypeError):
+    AIOHTTP_CLIENT_MAX_LINE_SIZE = 16 * 1024 * 1024
+
+_aiohttp_max_field_size_raw = os.getenv('AIOHTTP_CLIENT_MAX_FIELD_SIZE', '')
+try:
+    AIOHTTP_CLIENT_MAX_FIELD_SIZE = (
+        int(_aiohttp_max_field_size_raw) if _aiohttp_max_field_size_raw else 64 * 1024
+    )
+except (ValueError, TypeError):
+    AIOHTTP_CLIENT_MAX_FIELD_SIZE = 64 * 1024
+
 
 AIOHTTP_CLIENT_SESSION_SSL = os.getenv('AIOHTTP_CLIENT_SESSION_SSL', 'True').lower() == 'true'
 
@@ -770,7 +792,7 @@ if LICENSE_PUBLIC_KEY:
 
 WEBUI_NAME = os.getenv('WEBUI_NAME', 'Open WebUI')
 
-WEBUI_FAVICON_URL = 'https://openwebui.com/favicon.png'
+WEBUI_FAVICON_URL = os.getenv('WEBUI_FAVICON_URL', '/static/chatgpt-logo.svg')
 WEBUI_BUILD_HASH = os.getenv('WEBUI_BUILD_HASH', 'dev-build')
 TRUSTED_SIGNATURE_KEY = os.getenv('TRUSTED_SIGNATURE_KEY', '')
 

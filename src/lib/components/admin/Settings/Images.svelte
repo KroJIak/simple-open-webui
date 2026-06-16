@@ -338,24 +338,6 @@
 							</div>
 						</div>
 
-						<div class="mb-2.5">
-							<div class="flex w-full justify-between items-center">
-								<div class="text-xs pr-2">
-									<div class="shrink-0">
-										{$i18n.t('Image Size')}
-									</div>
-								</div>
-
-								<Tooltip content={$i18n.t('Enter Image Size (e.g. 512x512)')} placement="top-start">
-									<input
-										class="  text-right text-sm bg-transparent outline-hidden max-w-full w-52"
-										placeholder={$i18n.t('Enter Image Size (e.g. 512x512)')}
-										bind:value={config.IMAGE_SIZE}
-									/>
-								</Tooltip>
-							</div>
-						</div>
-
 						{#if ['comfyui', 'automatic1111', ''].includes(config?.IMAGE_GENERATION_ENGINE)}
 							<div class="mb-2.5">
 								<div class="flex w-full justify-between items-center">

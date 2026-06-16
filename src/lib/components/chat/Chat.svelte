@@ -49,7 +49,8 @@
 		showFileNavPath,
 		showFileNavDir,
 		chatRequestQueues,
-		desktopEvent
+		desktopEvent,
+		socketConnected
 	} from '$lib/stores';
 
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
@@ -158,7 +159,139 @@
 
 	let imageGenerationEnabled = false;
 	let webSearchEnabled = false;
+	let deepWebSearchEnabled = false;
 	let codeInterpreterEnabled = false;
+
+	const CODEX_CLI_PROVIDER = 'codex_cli';
+	const DEFAULT_CODEX_REASONING_EFFORT = 'medium';
+	const REASONING_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'] as const;
+
+	const getModelProvider = (model: Model | undefined) =>
+		(model?.provider ?? (model as any)?.openai?.provider ?? '') as string;
+
+	const hasValidReasoningEffort = (value: unknown): value is (typeof REASONING_EFFORT_LEVELS)[number] =>
+		typeof value === 'string' &&
+		REASONING_EFFORT_LEVELS.includes(value as (typeof REASONING_EFFORT_LEVELS)[number]);
+
+	const areAllModelIdsCodexCli = (modelIds: string[] = []) => {
+		if (modelIds.length === 0) {
+			return false;
+		}
+
+		return modelIds.every((modelId) => {
+			const model = $models.find((item) => item.id === modelId);
+			return model && getModelProvider(model) === CODEX_CLI_PROVIDER;
+		});
+	};
+
+	const normalizeChatParams = (rawParams: Record<string, any> = {}, modelIds: string[] = []) => {
+		const nextParams = { ...(rawParams ?? {}) };
+
+		if (areAllModelIdsCodexCli(modelIds) && !hasValidReasoningEffort(nextParams.reasoning_effort)) {
+			nextParams.reasoning_effort = DEFAULT_CODEX_REASONING_EFFORT;
+		}
+
+		return nextParams;
+	};
+
+	const isCodeInterpreterFeatureEnabled = () => $config?.features?.enable_code_interpreter ?? true;
+	const shouldRequestCodeInterpreter = () =>
+		isCodeInterpreterFeatureEnabled() &&
+		($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter);
+
+	const canUseCodeInterpreterForModelIds = (modelIds: string[] = []) => {
+		if ($selectedTerminalId) {
+			return false;
+		}
+
+		if (!isCodeInterpreterFeatureEnabled() || !($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)) {
+			return false;
+		}
+
+		if (modelIds.length === 0) {
+			return false;
+		}
+
+		return modelIds.every((modelId) => {
+			const model = $models.find((m) => m.id === modelId);
+			return model && (model.info?.meta?.capabilities?.code_interpreter ?? true);
+		});
+	};
+
+	let currentModelIds = [];
+	let currentModels = [];
+	let availableChatModels = [];
+	let codexCliModels = [];
+	let codexCliWebSearchMode = false;
+	$: {
+		currentModelIds = (atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).filter(
+			(modelId) => modelId
+		);
+		currentModels = currentModelIds
+			.map((modelId) => $models.find((model) => model.id === modelId))
+			.filter((model) => model !== undefined);
+		availableChatModels = $models.filter(
+			(model) =>
+				model.id &&
+				model.id !== '' &&
+				model.info?.meta?.capabilities?.web_search !== false &&
+				model.owned_by !== 'arena'
+		);
+		codexCliModels = currentModels.filter(
+			(model) => getModelProvider(model) === CODEX_CLI_PROVIDER
+		);
+
+		if (currentModelIds.length > 0) {
+			codexCliWebSearchMode =
+				currentModels.length === currentModelIds.length &&
+				codexCliModels.length === currentModelIds.length;
+		} else {
+			codexCliWebSearchMode =
+				availableChatModels.length > 0 &&
+				availableChatModels.every((model) => getModelProvider(model) === CODEX_CLI_PROVIDER);
+		}
+	}
+
+	$: codeInterpreterEnabled = canUseCodeInterpreterForModelIds(currentModelIds);
+
+	const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+	const getLiveSocketSessionId = () => {
+		const activeSocket = get(socket);
+		return activeSocket?.connected && activeSocket?.id ? activeSocket.id : null;
+	};
+
+	const waitForLiveSocketSessionId = async ({
+		timeoutMs = 8000,
+		intervalMs = 100
+	}: {
+		timeoutMs?: number;
+		intervalMs?: number;
+	} = {}) => {
+		let sessionId = getLiveSocketSessionId();
+		if (sessionId) {
+			return sessionId;
+		}
+
+		const startedAt = Date.now();
+		while (Date.now() - startedAt < timeoutMs) {
+			await sleep(intervalMs);
+			sessionId = getLiveSocketSessionId();
+			if (sessionId) {
+				return sessionId;
+			}
+		}
+
+		return null;
+	};
+
+	$: if (codexCliWebSearchMode) {
+		deepWebSearchEnabled = false;
+	}
+
+	$: if (areAllModelIdsCodexCli(currentModelIds) && !hasValidReasoningEffort(params?.reasoning_effort)) {
+		params = normalizeChatParams(params, currentModelIds);
+	}
 
 	let showCommands = false;
 
@@ -208,12 +341,13 @@
 		prompt = '';
 		messageInput?.setText('');
 
-		files = [];
-		selectedToolIds = [];
-		selectedSkillIds = [];
-		selectedFilterIds = [];
-		webSearchEnabled = false;
-		imageGenerationEnabled = false;
+			files = [];
+			selectedToolIds = [];
+			selectedSkillIds = [];
+			selectedFilterIds = [];
+			webSearchEnabled = false;
+			deepWebSearchEnabled = false;
+			imageGenerationEnabled = false;
 
 		const storageChatInput = sessionStorage.getItem(
 			`chat-input${chatIdProp ? `-${chatIdProp}` : ''}`
@@ -247,10 +381,10 @@
 						files = input.files;
 						selectedToolIds = input.selectedToolIds;
 						selectedSkillIds = input.selectedSkillIds ?? [];
-						selectedFilterIds = input.selectedFilterIds;
-						webSearchEnabled = input.webSearchEnabled;
-						imageGenerationEnabled = input.imageGenerationEnabled;
-						codeInterpreterEnabled = input.codeInterpreterEnabled;
+							selectedFilterIds = input.selectedFilterIds;
+							webSearchEnabled = input.webSearchEnabled ?? false;
+							deepWebSearchEnabled = input.deepWebSearchEnabled ?? false;
+							imageGenerationEnabled = input.imageGenerationEnabled;
 					}
 				} catch (e) {}
 			} else {
@@ -282,6 +416,10 @@
 		saveSessionSelectedModels();
 	}
 
+	$: if (!chatIdProp && $page.url.pathname === '/' && $models.length > 0) {
+		void resolveSelectedModelsForNewChat(false);
+	}
+
 	const saveSessionSelectedModels = () => {
 		const selectedModelsString = JSON.stringify(selectedModels);
 		if (
@@ -307,12 +445,13 @@
 
 	const resetInput = async () => {
 		selectedToolIds = [];
-		selectedSkillIds = [];
-		selectedFilterIds = [];
-		pendingOAuthTools = [];
-		webSearchEnabled = false;
-		imageGenerationEnabled = false;
-		codeInterpreterEnabled = false;
+			selectedSkillIds = [];
+			selectedFilterIds = [];
+			pendingOAuthTools = [];
+			webSearchEnabled = false;
+			deepWebSearchEnabled = false;
+			imageGenerationEnabled = false;
+			codeInterpreterEnabled = false;
 
 		if (selectedModelIds.filter((id) => id).length > 0) {
 			await setDefaults();
@@ -404,21 +543,28 @@
 					imageGenerationEnabled = model.info.meta.defaultFeatureIds.includes('image_generation');
 				}
 
-				if (
-					model.info?.meta?.capabilities?.['web_search'] &&
-					$config?.features?.enable_web_search &&
-					($user?.role === 'admin' || $user?.permissions?.features?.web_search)
-				) {
-					webSearchEnabled = model.info.meta.defaultFeatureIds.includes('web_search');
-				}
+					if (
+						model.info?.meta?.capabilities?.['web_search'] &&
+						$config?.features?.enable_web_search &&
+						($user?.role === 'admin' || $user?.permissions?.features?.web_search)
+					) {
+						webSearchEnabled =
+							model.provider === CODEX_CLI_PROVIDER
+								? true
+								: model.info.meta.defaultFeatureIds.includes('web_search');
+						deepWebSearchEnabled = false;
+					}
 
-				if (
-					model.info?.meta?.capabilities?.['code_interpreter'] &&
-					$config?.features?.enable_code_interpreter &&
-					($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
-				) {
-					codeInterpreterEnabled = model.info.meta.defaultFeatureIds.includes('code_interpreter');
-				}
+			}
+
+			if (
+				model.provider === CODEX_CLI_PROVIDER &&
+				model.info?.meta?.capabilities?.['web_search'] &&
+				$config?.features?.enable_web_search &&
+				($user?.role === 'admin' || $user?.permissions?.features?.web_search)
+			) {
+				webSearchEnabled = true;
+				deepWebSearchEnabled = false;
 			}
 
 			// Set Default Terminal — only if the referenced terminal actually exists
@@ -850,12 +996,12 @@
 				messageInput?.setText('');
 
 				files = [];
-				selectedToolIds = [];
-				selectedSkillIds = [];
-				selectedFilterIds = [];
-				webSearchEnabled = false;
-				imageGenerationEnabled = false;
-				codeInterpreterEnabled = false;
+					selectedToolIds = [];
+					selectedSkillIds = [];
+					selectedFilterIds = [];
+					webSearchEnabled = false;
+					deepWebSearchEnabled = false;
+					imageGenerationEnabled = false;
 
 				try {
 					const input = JSON.parse(storageChatInput);
@@ -865,10 +1011,10 @@
 						files = input.files;
 						selectedToolIds = input.selectedToolIds;
 						selectedSkillIds = input.selectedSkillIds ?? [];
-						selectedFilterIds = input.selectedFilterIds;
-						webSearchEnabled = input.webSearchEnabled;
-						imageGenerationEnabled = input.imageGenerationEnabled;
-						codeInterpreterEnabled = input.codeInterpreterEnabled;
+							selectedFilterIds = input.selectedFilterIds;
+							webSearchEnabled = input.webSearchEnabled ?? false;
+							deepWebSearchEnabled = input.deepWebSearchEnabled ?? false;
+							imageGenerationEnabled = input.imageGenerationEnabled;
 					}
 				} catch (e) {}
 			}
@@ -1150,6 +1296,90 @@
 	// Web functions
 	//////////////////////////
 
+	const hasSelectedModel = (modelIds: string[] = []) =>
+		modelIds.length > 0 && modelIds.some((modelId) => modelId && modelId !== '');
+
+	const resolveSelectedModelsForNewChat = async (force = false) => {
+		const availableModels = $models
+			.filter((m) => !(m?.info?.meta?.hidden ?? false))
+			.map((m) => m.id);
+
+		if (availableModels.length === 0) {
+			return;
+		}
+
+		if (!force && hasSelectedModel(selectedModels)) {
+			const validSelectedModels = selectedModels.filter((modelId) =>
+				availableModels.includes(modelId)
+			);
+			if (hasSelectedModel(validSelectedModels)) {
+				if (!equal(validSelectedModels, selectedModels)) {
+					selectedModels = validSelectedModels;
+				}
+				return;
+			}
+		}
+
+		const defaultModels = $config?.default_models ? $config?.default_models.split(',') : [];
+		let nextSelectedModels = [...selectedModels];
+
+		if ($page.url.searchParams.get('models') || $page.url.searchParams.get('model')) {
+			const urlModels = (
+				$page.url.searchParams.get('models') ||
+				$page.url.searchParams.get('model') ||
+				''
+			)?.split(',');
+
+			if (urlModels.length === 1) {
+				if (!$models.find((m) => m.id === urlModels[0])) {
+					const modelSelectorButton = document.getElementById('model-selector-0-button');
+					if (modelSelectorButton) {
+						modelSelectorButton.click();
+						await tick();
+
+						const modelSelectorInput = document.getElementById('model-search-input');
+						if (modelSelectorInput) {
+							modelSelectorInput.focus();
+							modelSelectorInput.value = urlModels[0];
+							modelSelectorInput.dispatchEvent(new Event('input'));
+						}
+					}
+				} else {
+					nextSelectedModels = urlModels;
+				}
+			} else {
+				nextSelectedModels = urlModels;
+			}
+
+			nextSelectedModels = nextSelectedModels.filter((modelId) => $models.some((m) => m.id === modelId));
+		} else if ($selectedFolder?.data?.model_ids) {
+			nextSelectedModels = $selectedFolder?.data?.model_ids;
+		} else if (sessionStorage.selectedModels) {
+			nextSelectedModels = JSON.parse(sessionStorage.selectedModels);
+			sessionStorage.removeItem('selectedModels');
+		} else if ($settings?.models) {
+			nextSelectedModels = $settings?.models;
+		} else if (defaultModels && defaultModels.length > 0) {
+			nextSelectedModels = defaultModels;
+		}
+
+		nextSelectedModels = nextSelectedModels.filter((modelId) => availableModels.includes(modelId));
+
+		if (!hasSelectedModel(nextSelectedModels)) {
+			if (defaultModels && defaultModels.length > 0) {
+				nextSelectedModels = defaultModels.filter((modelId) => availableModels.includes(modelId));
+			}
+
+			if (!hasSelectedModel(nextSelectedModels)) {
+				nextSelectedModels = [availableModels.at(0) ?? ''];
+			}
+		}
+
+		if (!equal(nextSelectedModels, selectedModels)) {
+			selectedModels = nextSelectedModels;
+		}
+	};
+
 	const initNewChat = async () => {
 		console.log('initNewChat');
 		if ($user?.role !== 'admin' && $user?.permissions?.chat?.temporary_enforced) {
@@ -1169,89 +1399,7 @@
 			await temporaryChatEnabled.set(false);
 		}
 
-		const availableModels = $models
-			.filter((m) => !(m?.info?.meta?.hidden ?? false))
-			.map((m) => m.id);
-
-		const defaultModels = $config?.default_models ? $config?.default_models.split(',') : [];
-
-		if ($page.url.searchParams.get('models') || $page.url.searchParams.get('model')) {
-			const urlModels = (
-				$page.url.searchParams.get('models') ||
-				$page.url.searchParams.get('model') ||
-				''
-			)?.split(',');
-
-			if (urlModels.length === 1) {
-				if (!$models.find((m) => m.id === urlModels[0])) {
-					// Model not found; open model selector and prefill
-					const modelSelectorButton = document.getElementById('model-selector-0-button');
-					if (modelSelectorButton) {
-						modelSelectorButton.click();
-						await tick();
-
-						const modelSelectorInput = document.getElementById('model-search-input');
-						if (modelSelectorInput) {
-							modelSelectorInput.focus();
-							modelSelectorInput.value = urlModels[0];
-							modelSelectorInput.dispatchEvent(new Event('input'));
-						}
-					}
-				} else {
-					// Model found; set it as selected
-					selectedModels = urlModels;
-				}
-			} else {
-				// Multiple models; set as selected
-				selectedModels = urlModels;
-			}
-
-			// Unavailable models filtering
-			selectedModels = selectedModels.filter((modelId) =>
-				$models.map((m) => m.id).includes(modelId)
-			);
-		} else {
-			if ($selectedFolder?.data?.model_ids) {
-				// Set from folder model IDs
-				selectedModels = $selectedFolder?.data?.model_ids;
-			} else {
-				if (sessionStorage.selectedModels) {
-					// Set from session storage (temporary selection)
-					selectedModels = JSON.parse(sessionStorage.selectedModels);
-					sessionStorage.removeItem('selectedModels');
-				} else {
-					if ($settings?.models) {
-						// Set from user settings
-						selectedModels = $settings?.models;
-					} else if (defaultModels && defaultModels.length > 0) {
-						// Set from default models
-						selectedModels = defaultModels;
-					}
-				}
-			}
-
-			// Unavailable & hidden models filtering
-			selectedModels = selectedModels.filter((modelId) => availableModels.includes(modelId));
-		}
-
-		// Ensure at least one model is selected
-		if (selectedModels.length === 0 || (selectedModels.length === 1 && selectedModels[0] === '')) {
-			if (availableModels.length > 0) {
-				if (defaultModels && defaultModels.length > 0) {
-					selectedModels = defaultModels.filter((modelId) => availableModels.includes(modelId));
-				}
-
-				if (
-					selectedModels.length === 0 ||
-					(selectedModels.length === 1 && selectedModels[0] === '')
-				) {
-					// Only fall back to first available model if default models didn't resolve
-					selectedModels = [availableModels?.at(0) ?? ''];
-				}
-			} else {
-				selectedModels = [''];
-			}
-		}
+		await resolveSelectedModelsForNewChat(true);
 
 		if ($mobile) {
 			await showControls.set(false);
@@ -1275,7 +1423,7 @@
 		};
 
 		chatFiles = [];
-		params = {};
+		params = normalizeChatParams({}, selectedModels.filter((modelId) => modelId));
 		taskIds = null;
 		chatTasks = [];
 
@@ -1287,16 +1435,17 @@
 			await uploadWeb($page.url.searchParams.get('load-url'));
 		}
 
-		if ($page.url.searchParams.get('web-search') === 'true') {
-			webSearchEnabled = true;
-		}
+			if ($page.url.searchParams.get('web-search') === 'true') {
+				webSearchEnabled = true;
+			}
+
+			if ($page.url.searchParams.get('deep-web-search') === 'true') {
+				webSearchEnabled = true;
+				deepWebSearchEnabled = true;
+			}
 
 		if ($page.url.searchParams.get('image-generation') === 'true') {
 			imageGenerationEnabled = true;
-		}
-
-		if ($page.url.searchParams.get('code-interpreter') === 'true') {
-			codeInterpreterEnabled = true;
 		}
 
 		if ($page.url.searchParams.get('tools')) {
@@ -1430,7 +1579,10 @@
 
 				chatTitle.set(chatContent.title);
 
-				params = chatContent?.params ?? {};
+				params = normalizeChatParams(
+					chatContent?.params ?? {},
+					selectedModels.filter((modelId) => modelId)
+				);
 				chatFiles = chatContent?.files ?? [];
 
 				// Load tasks from chat-level DB field
@@ -2204,11 +2356,15 @@
 		}
 	};
 
-	const getFeatures = () => {
-		let features = {};
+		const getFeatures = () => {
+			let features = {};
 
-		if ($config?.features)
-			features = {
+			if (!webSearchEnabled && deepWebSearchEnabled) {
+				deepWebSearchEnabled = false;
+			}
+
+			if ($config?.features)
+				features = {
 				voice: $showCallOverlay,
 				image_generation:
 					$config?.features?.enable_image_generation &&
@@ -2216,24 +2372,30 @@
 						? imageGenerationEnabled
 						: false,
 				code_interpreter:
-					$config?.features?.enable_code_interpreter &&
-					($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
-						? codeInterpreterEnabled
-						: false,
-				web_search:
-					$config?.features?.enable_web_search &&
-					($user?.role === 'admin' || $user?.permissions?.features?.web_search)
-						? webSearchEnabled
-						: false
-			};
+					shouldRequestCodeInterpreter() ? true : false,
+					web_search:
+						$config?.features?.enable_web_search &&
+						($user?.role === 'admin' || $user?.permissions?.features?.web_search)
+							? webSearchEnabled
+							: false,
+					deep_web_search:
+						$config?.features?.enable_web_search &&
+						($user?.role === 'admin' || $user?.permissions?.features?.web_search)
+							? webSearchEnabled && deepWebSearchEnabled
+							: false
+				};
 
-		const currentModels = atSelectedModel?.id ? [atSelectedModel.id] : selectedModels;
+		const currentModels = currentModelIds;
 		if (
 			currentModels.filter(
 				(model) => $models.find((m) => m.id === model)?.info?.meta?.capabilities?.web_search ?? true
 			).length === currentModels.length
 		) {
-			if ($config?.features?.enable_web_search && ($settings?.webSearch ?? false) === 'always') {
+			if (
+				$config?.features?.enable_web_search &&
+				($settings?.webSearch ?? false) === 'always' &&
+				!codexCliWebSearchMode
+			) {
 				features = { ...features, web_search: true };
 			}
 		}
@@ -2319,6 +2481,24 @@
 			$settings?.params?.stream_response ??
 			params?.stream_response ??
 			true;
+
+		const features = getFeatures();
+		const requiresLiveSocketSession =
+			Boolean(features?.code_interpreter) && $config?.code?.interpreter_engine !== 'jupyter';
+		let socketSessionId = getLiveSocketSessionId();
+
+		if (requiresLiveSocketSession && !socketSessionId) {
+			socketSessionId = await waitForLiveSocketSessionId();
+
+			if (!socketSessionId) {
+				throw new Error(
+					$socketConnected === false
+						? $i18n.t('Code interpreter needs the live connection. Wait for reconnection and try again.')
+						: $i18n.t('Code interpreter is still connecting. Try again in a second.')
+				);
+			}
+		}
+
 		// Always include system prompt — backend extracts it and prepends to DB messages.
 		// Only temp chats need conversation messages (persisted chats load from DB).
 		let messages = [
@@ -2456,7 +2636,7 @@
 					// Direct terminal servers — always included when enabled (not routed through selectedToolIds)
 					...($terminalServers ?? []).filter((t) => !t.id)
 				],
-				features: getFeatures(),
+				features,
 				variables: {
 					...getPromptVariables(
 						$user?.name,
@@ -2466,9 +2646,10 @@
 				},
 				model_item: $models.find((m) => m.id === model.id),
 
-				session_id: $socket?.id,
+				session_id: socketSessionId ?? undefined,
 				chat_id: _chatId || undefined,
 				folder_id: $selectedFolder?.id ?? undefined,
+				new_chat_title: $i18n.t('New Chat'),
 
 				id: responseMessageId,
 				...(messageIdsMap ? { message_ids: messageIdsMap } : {}),
@@ -3008,7 +3189,7 @@
 				/>
 
 				<div
-					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-900 dark:to-gray-900/90 z-0"
+					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-950 dark:to-gray-950/95 z-0"
 				/>
 			{:else if $settings?.backgroundImageUrl ?? $config?.license_metadata?.background_image_url ?? null}
 				<div
@@ -3018,7 +3199,7 @@
 				/>
 
 				<div
-					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-900 dark:to-gray-900/90 z-0"
+					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-950 dark:to-gray-950/95 z-0"
 				/>
 			{/if}
 
@@ -3089,7 +3270,7 @@
 					<div id="chat-pane" class="flex flex-col flex-auto z-10 w-full @container overflow-auto">
 						{#if ($settings?.landingPageMode === 'chat' && !$selectedFolder) || createMessagesList(history, history.currentId).length > 0}
 							<div
-								class=" pb-2.5 flex flex-col justify-between w-full flex-auto overflow-auto h-0 max-w-full z-10 scrollbar-hidden"
+								class=" pb-0.5 flex flex-col justify-between w-full flex-auto overflow-auto h-0 max-w-full z-10 scrollbar-hidden"
 								id="messages-container"
 								bind:this={messagesContainerElement}
 								on:scroll={(e) => {
@@ -3126,7 +3307,7 @@
 								</div>
 							</div>
 
-							<div class=" pb-2 {dragged ? 'z-0' : 'z-10'}">
+							<div class="pb-7 sm:pb-8 {dragged ? 'z-0' : 'z-10'}">
 								<MessageInput
 									bind:this={messageInput}
 									{history}
@@ -3134,6 +3315,7 @@
 									{selectedModels}
 									bind:files
 									bind:prompt
+									bind:params
 									bind:autoScroll
 									bind:selectedToolIds
 									bind:selectedSkillIds
@@ -3142,6 +3324,7 @@
 									bind:codeInterpreterEnabled
 									{pendingOAuthTools}
 									bind:webSearchEnabled
+									bind:deepWebSearchEnabled
 									bind:atSelectedModel
 									bind:showCommands
 									bind:dragged
@@ -3209,21 +3392,23 @@
 								</div>
 							</div>
 						{:else}
-							<div class="flex items-center h-full">
+							<div class="flex items-center justify-center h-full">
 								<Placeholder
 									{history}
 									{selectedModels}
 									bind:messageInput
 									bind:files
 									bind:prompt
+									bind:params
 									bind:autoScroll
 									bind:selectedToolIds
 									bind:selectedSkillIds
 									bind:selectedFilterIds
-									bind:imageGenerationEnabled
-									bind:codeInterpreterEnabled
-									bind:webSearchEnabled
-									bind:atSelectedModel
+										bind:imageGenerationEnabled
+										bind:codeInterpreterEnabled
+										bind:webSearchEnabled
+										bind:deepWebSearchEnabled
+										bind:atSelectedModel
 									bind:showCommands
 									bind:dragged
 									{pendingOAuthTools}

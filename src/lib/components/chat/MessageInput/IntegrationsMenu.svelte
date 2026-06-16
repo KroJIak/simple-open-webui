@@ -30,7 +30,6 @@
 	import Sparkles from '$lib/components/icons/Sparkles.svelte';
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte';
 	import Photo from '$lib/components/icons/Photo.svelte';
-	import Terminal from '$lib/components/icons/Terminal.svelte';
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte';
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte';
 	import LinkSlash from '$lib/components/icons/LinkSlash.svelte';
@@ -49,10 +48,10 @@
 
 	export let showWebSearchButton = false;
 	export let webSearchEnabled = false;
+	export let deepWebSearchEnabled = false;
+	export let codexCliWebSearchMode = false;
 	export let showImageGenerationButton = false;
 	export let imageGenerationEnabled = false;
-	export let showCodeInterpreterButton = false;
-	export let codeInterpreterEnabled = false;
 
 	export let onShowValves: Function;
 	export let onClose: Function;
@@ -265,14 +264,49 @@
 						{/each}
 					{/if}
 
-					{#if showWebSearchButton}
-						<Tooltip content={$i18n.t('Search the internet')} placement="top-start">
-							<button
-								class="flex w-full justify-between gap-2 items-center px-3 py-1.5 text-sm cursor-pointer rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50"
-								on:click={() => {
-									webSearchEnabled = !webSearchEnabled;
-								}}
+						{#if showWebSearchButton && codexCliWebSearchMode}
+							<Tooltip
+								content={$i18n.t('Disable internet access for this message')}
+								placement="top-start"
 							>
+								<button
+									class="flex w-full justify-between gap-2 items-center px-3 py-1.5 text-sm cursor-pointer rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50"
+									on:click={() => {
+										webSearchEnabled = !webSearchEnabled;
+										deepWebSearchEnabled = false;
+									}}
+								>
+									<div class="flex-1 truncate">
+										<div class="flex flex-1 gap-2 items-center">
+											<div class="shrink-0">
+												<LinkSlash className="size-4" strokeWidth="1.75" />
+											</div>
+
+											<div class="truncate">{$i18n.t('Do not search the internet')}</div>
+										</div>
+									</div>
+
+									<div class="shrink-0">
+										<Switch
+											state={!webSearchEnabled}
+											on:change={async () => {
+												await tick();
+											}}
+										/>
+									</div>
+								</button>
+							</Tooltip>
+						{:else if showWebSearchButton}
+							<Tooltip content={$i18n.t('Search the internet')} placement="top-start">
+								<button
+									class="flex w-full justify-between gap-2 items-center px-3 py-1.5 text-sm cursor-pointer rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50"
+									on:click={() => {
+										webSearchEnabled = !webSearchEnabled;
+										if (!webSearchEnabled) {
+											deepWebSearchEnabled = false;
+										}
+									}}
+								>
 								<div class="flex-1 truncate">
 									<div class="flex flex-1 gap-2 items-center">
 										<div class="shrink-0">
@@ -292,9 +326,39 @@
 										}}
 									/>
 								</div>
-							</button>
-						</Tooltip>
-					{/if}
+								</button>
+							</Tooltip>
+						{/if}
+
+						{#if showWebSearchButton && webSearchEnabled && !codexCliWebSearchMode}
+							<Tooltip content={$i18n.t('Research the web more deeply')} placement="top-start">
+								<button
+									class="flex w-full justify-between gap-2 items-center px-3 py-1.5 text-sm cursor-pointer rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50"
+									on:click={() => {
+										deepWebSearchEnabled = !deepWebSearchEnabled;
+									}}
+								>
+									<div class="flex-1 truncate">
+										<div class="flex flex-1 gap-2 items-center">
+											<div class="shrink-0">
+												<Sparkles className="size-4" strokeWidth="1.75" />
+											</div>
+
+											<div class="truncate">{$i18n.t('Deep Web Search')}</div>
+										</div>
+									</div>
+
+									<div class=" shrink-0">
+										<Switch
+											state={deepWebSearchEnabled}
+											on:change={async () => {
+												await tick();
+											}}
+										/>
+									</div>
+								</button>
+							</Tooltip>
+						{/if}
 
 					{#if showImageGenerationButton}
 						<Tooltip content={$i18n.t('Generate an image')} placement="top-start">
@@ -327,40 +391,6 @@
 						</Tooltip>
 					{/if}
 
-					{#if showCodeInterpreterButton}
-						<Tooltip content={$i18n.t('Execute code for analysis')} placement="top-start">
-							<button
-								class="flex w-full justify-between gap-2 items-center px-3 py-1.5 text-sm cursor-pointer rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50"
-								aria-pressed={codeInterpreterEnabled}
-								aria-label={codeInterpreterEnabled
-									? $i18n.t('Disable Code Interpreter')
-									: $i18n.t('Enable Code Interpreter')}
-								on:click={() => {
-									codeInterpreterEnabled = !codeInterpreterEnabled;
-								}}
-							>
-								<div class="flex-1 truncate">
-									<div class="flex flex-1 gap-2 items-center">
-										<div class="shrink-0">
-											<Terminal className="size-3.5" strokeWidth="1.75" />
-										</div>
-
-										<div class=" truncate">{$i18n.t('Code Interpreter')}</div>
-									</div>
-								</div>
-
-								<div class=" shrink-0">
-									<Switch
-										state={codeInterpreterEnabled}
-										on:change={async (e) => {
-											const state = e.detail;
-											await tick();
-										}}
-									/>
-								</div>
-							</button>
-						</Tooltip>
-					{/if}
 				</div>
 			{:else if tab === 'tools' && tools}
 				<div in:fly={{ x: 20, duration: 150 }}>

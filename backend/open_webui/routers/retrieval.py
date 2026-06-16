@@ -1886,13 +1886,25 @@ async def process_web(
         )
 
 
-async def search_web(request: Request, engine: str, query: str, user=None) -> list[SearchResult]:
+async def search_web(
+    request: Request,
+    engine: str,
+    query: str,
+    user=None,
+    result_count: int | None = None,
+) -> list[SearchResult]:
     """Dispatch a web search query to the configured engine and return results.
 
     Providers that have been migrated to async (aiohttp) are awaited natively.
     Legacy sync providers are offloaded via ``asyncio.to_thread`` to avoid
     blocking the event loop.
     """
+
+    result_count = (
+        request.app.state.config.WEB_SEARCH_RESULT_COUNT
+        if result_count is None
+        else result_count
+    )
 
     # TODO: add playwright to search the web
     if engine == 'ollama_cloud':
@@ -1901,7 +1913,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             'https://ollama.com',
             request.app.state.config.OLLAMA_CLOUD_WEB_SEARCH_API_KEY,
             query,
-            request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+            result_count,
             request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
         )
     elif engine == 'perplexity_search':
@@ -1910,7 +1922,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 search_perplexity_search,
                 request.app.state.config.PERPLEXITY_API_KEY,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
                 request.app.state.config.PERPLEXITY_SEARCH_API_URL,
                 user,
@@ -1923,7 +1935,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             return await search_searxng(
                 request.app.state.config.SEARXNG_QUERY_URL,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
                 **searxng_kwargs,
             )
@@ -1937,7 +1949,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 request.app.state.config.YACY_USERNAME,
                 request.app.state.config.YACY_PASSWORD,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -1948,7 +1960,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 request.app.state.config.GOOGLE_PSE_API_KEY,
                 request.app.state.config.GOOGLE_PSE_ENGINE_ID,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
                 referer=request.app.state.config.WEBUI_URL,
             )
@@ -1959,7 +1971,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             return await search_brave(
                 request.app.state.config.BRAVE_SEARCH_API_KEY,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -1970,7 +1982,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 search_brave_llm_context,
                 request.app.state.config.BRAVE_SEARCH_API_KEY,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
                 request.app.state.config.BRAVE_SEARCH_CONTEXT_TOKENS,
             )
@@ -1982,7 +1994,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 search_kagi,
                 request.app.state.config.KAGI_SEARCH_API_KEY,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -1993,7 +2005,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 search_mojeek,
                 request.app.state.config.MOJEEK_SEARCH_API_KEY,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -2004,7 +2016,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 search_bocha,
                 request.app.state.config.BOCHA_SEARCH_API_KEY,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -2014,7 +2026,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             return await search_serpstack(
                 request.app.state.config.SERPSTACK_API_KEY,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
                 https_enabled=request.app.state.config.SERPSTACK_HTTPS,
             )
@@ -2025,7 +2037,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             return await search_serper(
                 request.app.state.config.SERPER_API_KEY,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -2036,7 +2048,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 search_serply,
                 request.app.state.config.SERPLY_API_KEY,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 filter_list=request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -2045,7 +2057,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
         return await asyncio.to_thread(
             search_duckduckgo,
             query,
-            request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+            result_count,
             request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             concurrent_requests=request.app.state.config.WEB_SEARCH_CONCURRENT_REQUESTS,
             backend=request.app.state.config.DDGS_BACKEND,
@@ -2056,7 +2068,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 search_tavily,
                 request.app.state.config.TAVILY_API_KEY,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -2067,7 +2079,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 search_exa,
                 request.app.state.config.EXA_API_KEY,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -2079,7 +2091,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 request.app.state.config.SEARCHAPI_API_KEY,
                 request.app.state.config.SEARCHAPI_ENGINE,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -2091,7 +2103,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 request.app.state.config.SERPAPI_API_KEY,
                 request.app.state.config.SERPAPI_ENGINE,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -2101,7 +2113,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             search_jina,
             request.app.state.config.JINA_API_KEY,
             query,
-            request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+            result_count,
             request.app.state.config.JINA_API_BASE_URL,
         )
     elif engine == 'bing':
@@ -2111,7 +2123,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             request.app.state.config.BING_SEARCH_V7_ENDPOINT,
             str(DEFAULT_LOCALE),
             query,
-            request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+            result_count,
             request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
         )
     elif engine == 'azure':
@@ -2126,7 +2138,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 request.app.state.config.AZURE_AI_SEARCH_ENDPOINT,
                 request.app.state.config.AZURE_AI_SEARCH_INDEX_NAME,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -2138,7 +2150,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             search_perplexity,
             request.app.state.config.PERPLEXITY_API_KEY,
             query,
-            request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+            result_count,
             request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             model=request.app.state.config.PERPLEXITY_MODEL,
             search_context_usage=request.app.state.config.PERPLEXITY_SEARCH_CONTEXT_USAGE,
@@ -2150,7 +2162,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 request.app.state.config.SOUGOU_API_SID,
                 request.app.state.config.SOUGOU_API_SK,
                 query,
-                request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                result_count,
                 request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             )
         else:
@@ -2161,7 +2173,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             request.app.state.config.FIRECRAWL_API_BASE_URL,
             request.app.state.config.FIRECRAWL_API_KEY,
             query,
-            request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+            result_count,
             request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
         )
     elif engine == 'external':
@@ -2171,7 +2183,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             request.app.state.config.EXTERNAL_WEB_SEARCH_URL,
             request.app.state.config.EXTERNAL_WEB_SEARCH_API_KEY,
             query,
-            request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+            result_count,
             request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             user=user,
         )
@@ -2183,7 +2195,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             request.app.state.config.YANDEX_WEB_SEARCH_API_KEY,
             request.app.state.config.YANDEX_WEB_SEARCH_CONFIG,
             query,
-            request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+            result_count,
             request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             user=user,
         )
@@ -2192,7 +2204,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             search_youcom,
             request.app.state.config.YOUCOM_API_KEY,
             query,
-            request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+            result_count,
             request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
         )
     elif engine == 'linkup':
@@ -2201,7 +2213,7 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 search_linkup,
                 api_key=request.app.state.config.LINKUP_API_KEY,
                 query=query,
-                count=request.app.state.config.WEB_SEARCH_RESULT_COUNT,
+                count=result_count,
                 filter_list=request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
                 params=request.app.state.config.LINKUP_SEARCH_PARAMS,
             )
@@ -2211,8 +2223,15 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
         raise Exception('No search engine API key found in environment variables')
 
 
-@router.post('/process/web/search')
-async def process_web_search(request: Request, form_data: SearchForm, user=Depends(get_verified_user)):
+async def _process_web_search(
+    request: Request,
+    form_data: SearchForm,
+    user,
+    *,
+    result_count: int | None = None,
+    bypass_web_loader: bool | None = None,
+    bypass_embedding_and_retrieval: bool | None = None,
+):
     if not request.app.state.config.ENABLE_WEB_SEARCH:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -2229,9 +2248,27 @@ async def process_web_search(request: Request, form_data: SearchForm, user=Depen
 
     urls = []
     result_items = []
+    search_result_count = (
+        request.app.state.config.WEB_SEARCH_RESULT_COUNT
+        if result_count is None
+        else result_count
+    )
+    use_bypass_web_loader = (
+        request.app.state.config.BYPASS_WEB_SEARCH_WEB_LOADER
+        if bypass_web_loader is None
+        else bypass_web_loader
+    )
+    use_bypass_embedding_and_retrieval = (
+        request.app.state.config.BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL
+        if bypass_embedding_and_retrieval is None
+        else bypass_embedding_and_retrieval
+    )
 
     try:
-        logging.debug(f'trying to web search with {request.app.state.config.WEB_SEARCH_ENGINE, form_data.queries}')
+        logging.debug(
+            f'trying to web search with '
+            f'{request.app.state.config.WEB_SEARCH_ENGINE, form_data.queries, search_result_count}'
+        )
 
         # Use semaphore to limit concurrent requests based on WEB_SEARCH_CONCURRENT_REQUESTS
         # 0 or None = unlimited (previous behavior), positive number = limited concurrency
@@ -2239,7 +2276,6 @@ async def process_web_search(request: Request, form_data: SearchForm, user=Depen
         concurrent_limit = request.app.state.config.WEB_SEARCH_CONCURRENT_REQUESTS
 
         if concurrent_limit:
-            # Limited concurrency with semaphore
             semaphore = asyncio.Semaphore(concurrent_limit)
 
             async def search_query_with_semaphore(query):
@@ -2249,17 +2285,18 @@ async def process_web_search(request: Request, form_data: SearchForm, user=Depen
                         request.app.state.config.WEB_SEARCH_ENGINE,
                         query,
                         user,
+                        result_count=search_result_count,
                     )
 
             search_tasks = [search_query_with_semaphore(query) for query in form_data.queries]
         else:
-            # Unlimited parallel execution
             search_tasks = [
                 search_web(
                     request,
                     request.app.state.config.WEB_SEARCH_ENGINE,
                     query,
                     user,
+                    result_count=search_result_count,
                 )
                 for query in form_data.queries
             ]
@@ -2287,7 +2324,7 @@ async def process_web_search(request: Request, form_data: SearchForm, user=Depen
         )
 
     try:
-        if request.app.state.config.BYPASS_WEB_SEARCH_WEB_LOADER:
+        if use_bypass_web_loader:
             search_results = [item for result in search_results for item in result if result]
 
             docs = [
@@ -2312,14 +2349,10 @@ async def process_web_search(request: Request, form_data: SearchForm, user=Depen
             )
             docs = await loader.aload()
 
-        urls = [
-            doc.metadata.get('source') for doc in docs if doc.metadata.get('source')
-        ]  # only keep the urls returned by the loader
-        result_items = [
-            dict(item) for item in result_items if item.link in urls
-        ]  # only keep the search results that have been loaded
+        urls = [doc.metadata.get('source') for doc in docs if doc.metadata.get('source')]
+        result_items = [dict(item) for item in result_items if item.link in urls]
 
-        if request.app.state.config.BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL:
+        if use_bypass_embedding_and_retrieval:
             return {
                 'status': True,
                 'collection_name': None,
@@ -2334,32 +2367,36 @@ async def process_web_search(request: Request, form_data: SearchForm, user=Depen
                 ],
                 'loaded_count': len(docs),
             }
-        else:
-            # Create a single collection for all documents
-            collection_name = f'web-search-{calculate_sha256_string("-".join(form_data.queries))}'[:63]
 
-            try:
-                await run_in_threadpool(
-                    save_docs_to_vector_db,
-                    request,
-                    docs,
-                    collection_name,
-                    overwrite=True,
-                    user=user,
-                )
-            except Exception as e:
-                log.debug(f'error saving docs: {e}')
+        collection_name = f'web-search-{calculate_sha256_string("-".join(form_data.queries))}'[:63]
 
-            return {
-                'status': True,
-                'collection_names': [collection_name],
-                'items': result_items,
-                'filenames': urls,
-                'loaded_count': len(docs),
-            }
+        try:
+            await run_in_threadpool(
+                save_docs_to_vector_db,
+                request,
+                docs,
+                collection_name,
+                overwrite=True,
+                user=user,
+            )
+        except Exception as e:
+            log.debug(f'error saving docs: {e}')
+
+        return {
+            'status': True,
+            'collection_names': [collection_name],
+            'items': result_items,
+            'filenames': urls,
+            'loaded_count': len(docs),
+        }
     except Exception as e:
         log.exception('Web search content loading failed')
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT(e))
+
+
+@router.post('/process/web/search')
+async def process_web_search(request: Request, form_data: SearchForm, user=Depends(get_verified_user)):
+    return await _process_web_search(request, form_data, user)
 
 
 async def _validate_collection_access(collection_names: list[str], user, access_type: str = 'read') -> None:

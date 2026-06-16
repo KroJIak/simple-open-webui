@@ -30,7 +30,6 @@
 	import { getModels } from '$lib/apis';
 
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
-	import Check from '$lib/components/icons/Check.svelte';
 	import Search from '$lib/components/icons/Search.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Switch from '$lib/components/common/Switch.svelte';
@@ -55,7 +54,7 @@
 		[key: string]: any;
 	}[] = [];
 
-	export let className = 'w-[32rem]';
+	export let className = '';
 	export let triggerClassName = 'text-lg';
 
 	export let pinModelHandler: (modelId: string) => void = () => {};
@@ -66,6 +65,7 @@
 	let triggerElement: HTMLElement | null = null;
 	let contentElement: HTMLElement | null = null;
 	let dropdownPosition = { top: 0, left: 0, width: 0 };
+	let textMeasureCanvas: HTMLCanvasElement | null = null;
 
 	const portal = (node: HTMLElement) => {
 		document.body.appendChild(node);
@@ -76,13 +76,69 @@
 		};
 	};
 
+	const formatMultiplier = (value: unknown) => {
+		if (value === null || value === undefined || value === '') return '';
+		const number = Number(value);
+
+		return Number.isFinite(number) ? `${Number.parseFloat(String(number))}x` : '';
+	};
+
+	const getDisplayLabel = (item: (typeof items)[number]) => {
+		const multiplier = formatMultiplier(
+			item?.model?.info?.meta?.usage_multiplier ?? item?.model?.meta?.usage_multiplier ?? null
+		);
+
+		return multiplier ? `${item.label} (${multiplier})` : item.label;
+	};
+
+	const getTextMeasureContext = () => {
+		if (!textMeasureCanvas) {
+			textMeasureCanvas = document.createElement('canvas');
+		}
+
+		return textMeasureCanvas.getContext('2d');
+	};
+
+	const getDropdownWidth = () => {
+		if (typeof window === 'undefined') return 360;
+
+		if ($mobile) {
+			return window.innerWidth - 16;
+		}
+
+		const visibleItems = (filteredItems.length > 0 ? filteredItems : items).filter(
+			(item) => !(item.model?.info?.meta?.hidden ?? false)
+		);
+		const context = getTextMeasureContext();
+		const viewportWidth = window.innerWidth - 16;
+
+		if (!context || visibleItems.length === 0) {
+			return Math.min(360, viewportWidth);
+		}
+
+		context.font = '500 16px sans-serif';
+
+		const longestLabelWidth = visibleItems.reduce(
+			(width, item) => Math.max(width, context.measureText(getDisplayLabel(item)).width),
+			0
+		);
+		const controlsWidth = 112;
+		const width = Math.ceil(longestLabelWidth + controlsWidth);
+
+		return Math.min(Math.max(width, 280), Math.min(520, viewportWidth));
+	};
+
 	const updatePosition = () => {
 		if (!show || !triggerElement) return;
+
 		const rect = triggerElement.getBoundingClientRect();
+		const width = getDropdownWidth();
+		const left = $mobile ? 8 : Math.min(Math.max(rect.left, 8), window.innerWidth - width - 8);
+
 		dropdownPosition = {
 			top: rect.bottom + 2,
-			left: $mobile ? 8 : rect.left,
-			width: $mobile ? window.innerWidth - 16 : 0
+			left,
+			width
 		};
 	};
 
@@ -130,6 +186,7 @@
 
 	let selectedTag = '';
 	let selectedConnectionType = '';
+	let connectionTypes = [];
 
 	let ollamaVersion = null;
 	let selectedModelIdx = 0;
@@ -395,11 +452,46 @@
 				.map((tag) => tag.name.toLowerCase());
 			// Remove duplicates and sort
 			tags = Array.from(new Set(tags)).sort((a, b) => a.localeCompare(b));
+
+			connectionTypes = Array.from(
+				new Set(
+					items
+						.filter((item) => !(item.model?.info?.meta?.hidden ?? false))
+						.map((item) =>
+							item.model?.direct
+								? 'direct'
+								: item.model?.connection_type || ''
+						)
+						.filter((type) => type !== '')
+				)
+			);
 		}
 	});
 
+	$: if (items) {
+		connectionTypes = Array.from(
+			new Set(
+				items
+					.filter((item) => !(item.model?.info?.meta?.hidden ?? false))
+					.map((item) =>
+						item.model?.direct
+							? 'direct'
+							: item.model?.connection_type || ''
+					)
+					.filter((type) => type !== '')
+			)
+		);
+	}
+
 	$: if (show) {
 		setOllamaVersion();
+	}
+
+	$: if (show) {
+		filteredItems;
+		void tick().then(() => {
+			updatePosition();
+		});
 	}
 
 	const cancelModelPullHandler = async (model: string) => {
@@ -518,7 +610,7 @@
 		on:click={toggleOpen}
 	>
 		<div
-			class="flex w-full text-left px-0.5 bg-transparent truncate {triggerClassName} justify-between {($settings?.highContrastMode ??
+			class="inline-flex max-w-full items-center text-left px-0.5 bg-transparent truncate font-semibold {triggerClassName} justify-between {($settings?.highContrastMode ??
 			false)
 				? 'dark:placeholder-gray-100 placeholder-gray-800'
 				: 'placeholder-gray-400'}"
@@ -536,7 +628,7 @@
 			{:else}
 				{placeholder}
 			{/if}
-			<ChevronDown className=" self-center ml-2 size-3" strokeWidth="2.5" />
+			<ChevronDown className="shrink-0 self-center ml-2 size-3" strokeWidth="2.5" />
 		</div>
 	</button>
 
@@ -544,14 +636,10 @@
 		<div
 			use:portal
 			bind:this={contentElement}
-			style="position: fixed; z-index: 9999; top: {dropdownPosition.top}px; left: {dropdownPosition.left}px;{$mobile
-				? ` width: ${dropdownPosition.width}px;`
-				: ''}"
+			style="position: fixed; z-index: 9999; top: {dropdownPosition.top}px; left: {dropdownPosition.left}px; width: {dropdownPosition.width}px;"
 		>
 			<div
-				class="z-40 {$mobile
-					? `w-full`
-					: `${className}`} max-w-[calc(100vw-1rem)] justify-start rounded-2xl bg-white dark:bg-gray-850 dark:text-white shadow-lg outline-hidden"
+				class="z-40 w-full {className} max-w-[calc(100vw-1rem)] justify-start rounded-2xl bg-white dark:bg-gray-850 dark:text-white shadow-lg outline-hidden"
 				transition:flyAndScale
 			>
 				<slot>
@@ -594,7 +682,7 @@
 					{/if}
 
 					<div class="px-2">
-						{#if tags && items.filter((item) => !(item.model?.info?.meta?.hidden ?? false)).length > 0}
+						{#if connectionTypes.length > 1 || tags.length > 0}
 							<div
 								class=" flex w-full bg-white dark:bg-gray-850 overflow-x-auto scrollbar-none font-[450] mb-0.5"
 								on:wheel={(e) => {
@@ -608,7 +696,7 @@
 									class="flex gap-1 w-fit text-center text-sm rounded-full bg-transparent px-1.5 whitespace-nowrap"
 									bind:this={tagsContainerElement}
 								>
-									{#if items.find((item) => item.model?.connection_type === 'local') || items.find((item) => item.model?.connection_type === 'external') || items.find((item) => item.model?.direct) || tags.length > 0}
+									{#if connectionTypes.length > 1 || tags.length > 0}
 										<button
 											class="min-w-fit outline-none px-1.5 py-0.5 {selectedTag === '' &&
 											selectedConnectionType === ''
@@ -624,7 +712,7 @@
 										</button>
 									{/if}
 
-									{#if items.find((item) => item.model?.connection_type === 'local')}
+									{#if connectionTypes.includes('local') && connectionTypes.length > 1}
 										<button
 											class="min-w-fit outline-none px-1.5 py-0.5 {selectedConnectionType ===
 											'local'
@@ -640,7 +728,7 @@
 										</button>
 									{/if}
 
-									{#if items.find((item) => item.model?.connection_type === 'external')}
+									{#if connectionTypes.includes('external') && connectionTypes.length > 1}
 										<button
 											class="min-w-fit outline-none px-1.5 py-0.5 {selectedConnectionType ===
 											'external'
@@ -656,7 +744,7 @@
 										</button>
 									{/if}
 
-									{#if items.find((item) => item.model?.direct)}
+									{#if connectionTypes.includes('direct') && connectionTypes.length > 1}
 										<button
 											class="min-w-fit outline-none px-1.5 py-0.5 {selectedConnectionType ===
 											'direct'
@@ -693,7 +781,7 @@
 						{/if}
 					</div>
 
-					<div class="px-2.5 group relative">
+					<div class="px-2.5 pt-2.5 group relative">
 						{#if filteredItems.length === 0}
 							{#if items.length === 0 && $user?.role === 'admin'}
 								<div class="flex flex-col items-start justify-center py-6 px-4 text-start">
@@ -841,8 +929,6 @@
 
 					<div class="pb-2.5"></div>
 
-					<div class="hidden w-[42rem]" />
-					<div class="hidden w-[32rem]" />
 				</slot>
 			</div>
 		</div>

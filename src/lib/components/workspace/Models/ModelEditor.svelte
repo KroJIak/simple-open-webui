@@ -77,7 +77,7 @@
 		base_model_id: null,
 		name: '',
 		meta: {
-			profile_image_url: `${WEBUI_BASE_URL}/static/favicon.png`,
+			profile_image_url: `${WEBUI_BASE_URL}/static/chatgpt-logo.svg`,
 			description: '',
 			suggestion_prompts: null,
 			tags: []
@@ -107,6 +107,39 @@
 	let accessGrants = [];
 	let terminalId = '';
 	let tts = { voice: '' };
+	const REASONING_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'] as const;
+	const DEFAULT_REASONING_DISABLED_TOOLTIP = 'бля, ну не наглей ты';
+
+	let usageMultiplier = '';
+	let reasoningEffortAvailable = {
+		low: true,
+		medium: true,
+		high: true,
+		xhigh: true
+	};
+	let reasoningEffortDisabledTooltip = DEFAULT_REASONING_DISABLED_TOOLTIP;
+	let reasoningEffortMultipliers = {
+		low: '',
+		medium: '',
+		high: '',
+		xhigh: ''
+	};
+
+	const parseOptionalNumber = (value, label) => {
+		const normalized = `${value ?? ''}`.trim().replace(',', '.');
+		if (normalized === '') return null;
+
+		const number = Number(normalized);
+		if (!Number.isFinite(number)) {
+			toast.error($i18n.t('{{label}} must be a number.', { label }));
+			return undefined;
+		}
+
+		return number;
+	};
+
+	const formatStoredNumber = (value) =>
+		value === null || value === undefined || value === '' ? '' : `${value}`;
 
 	const submitHandler = async () => {
 		loading = true;
@@ -139,6 +172,55 @@
 
 		info.access_grants = accessGrants;
 		info.meta.capabilities = capabilities;
+
+		const parsedUsageMultiplier = parseOptionalNumber(
+			usageMultiplier,
+			$i18n.t('Model weight')
+		);
+		if (parsedUsageMultiplier === undefined) {
+			loading = false;
+			return;
+		} else if (parsedUsageMultiplier === null) {
+			delete info.meta.usage_multiplier;
+		} else {
+			info.meta.usage_multiplier = parsedUsageMultiplier;
+		}
+
+		const parsedReasoningMultipliers: Record<string, number> = {};
+		for (const level of REASONING_EFFORT_LEVELS) {
+			const parsedMultiplier = parseOptionalNumber(
+				reasoningEffortMultipliers[level],
+				$i18n.t('Reasoning {{level}} weight', { level })
+			);
+
+			if (parsedMultiplier === undefined) {
+				loading = false;
+				return;
+			}
+
+			if (parsedMultiplier !== null) {
+				parsedReasoningMultipliers[level] = parsedMultiplier;
+			}
+		}
+
+		const availableReasoningLevels = REASONING_EFFORT_LEVELS.filter(
+			(level) => reasoningEffortAvailable[level]
+		);
+		const hasCustomReasoningSettings =
+			availableReasoningLevels.length !== REASONING_EFFORT_LEVELS.length ||
+			Object.keys(parsedReasoningMultipliers).length > 0 ||
+			reasoningEffortDisabledTooltip.trim() !== DEFAULT_REASONING_DISABLED_TOOLTIP;
+
+		if (hasCustomReasoningSettings) {
+			info.meta.reasoning_effort_settings = {
+				available: availableReasoningLevels,
+				disabled_tooltip:
+					reasoningEffortDisabledTooltip.trim() || DEFAULT_REASONING_DISABLED_TOOLTIP,
+				multipliers: parsedReasoningMultipliers
+			};
+		} else {
+			delete info.meta.reasoning_effort_settings;
+		}
 
 		if (enableDescription) {
 			info.meta.description = info.meta.description.trim() === '' ? null : info.meta.description;
@@ -331,6 +413,26 @@
 			builtinTools = model?.meta?.builtinTools ?? builtinTools;
 			terminalId = model?.meta?.terminalId ?? '';
 			tts = { voice: model?.meta?.tts?.voice ?? '' };
+			usageMultiplier = formatStoredNumber(model?.meta?.usage_multiplier);
+
+			const reasoningSettings = model?.meta?.reasoning_effort_settings ?? {};
+			const availableReasoningLevels = Array.isArray(reasoningSettings?.available)
+				? reasoningSettings.available
+				: REASONING_EFFORT_LEVELS;
+			reasoningEffortAvailable = Object.fromEntries(
+				REASONING_EFFORT_LEVELS.map((level) => [
+					level,
+					availableReasoningLevels.includes(level)
+				])
+			) as typeof reasoningEffortAvailable;
+			reasoningEffortDisabledTooltip =
+				reasoningSettings?.disabled_tooltip ?? DEFAULT_REASONING_DISABLED_TOOLTIP;
+			reasoningEffortMultipliers = Object.fromEntries(
+				REASONING_EFFORT_LEVELS.map((level) => [
+					level,
+					formatStoredNumber(reasoningSettings?.multipliers?.[level])
+				])
+			) as typeof reasoningEffortMultipliers;
 
 			accessGrants = model?.access_grants ?? [];
 
@@ -494,11 +596,11 @@
 					<div class="flex flex-row gap-4 md:gap-6 w-full">
 						<div class="self-start flex justify-center my-2 shrink-0">
 							<div class="self-center">
-								<button
-									class="rounded-2xl flex shrink-0 items-center {info.meta.profile_image_url !==
-									`${WEBUI_BASE_URL}/static/favicon.png`
-										? 'bg-transparent'
-										: 'bg-white'} shadow-xl group relative"
+									<button
+										class="rounded-2xl flex shrink-0 items-center {info.meta.profile_image_url !==
+										`${WEBUI_BASE_URL}/static/chatgpt-logo.svg`
+											? 'bg-transparent'
+											: 'bg-white'} shadow-xl group relative"
 									type="button"
 									aria-label={$i18n.t('Upload profile image')}
 									on:click={() => {
@@ -511,12 +613,12 @@
 											alt="model profile"
 											class="rounded-xl size-20 md:size-48 object-cover shrink-0"
 										/>
-									{:else}
-										<img
-											src="{WEBUI_BASE_URL}/static/favicon.png"
-											alt="model profile"
-											class=" rounded-xl size-20 md:size-48 object-cover shrink-0"
-										/>
+										{:else}
+											<img
+												src="{WEBUI_BASE_URL}/static/chatgpt-logo.svg"
+												alt="model profile"
+												class=" rounded-xl size-20 md:size-48 object-cover shrink-0"
+											/>
 									{/if}
 
 									<div class="absolute bottom-0 right-0 z-10">
@@ -547,10 +649,10 @@
 
 								<div class="flex w-full mt-1 justify-end">
 									<button
-										class="px-2 py-1 text-gray-500 rounded-lg text-xs"
-										on:click={() => {
-											info.meta.profile_image_url = `${WEBUI_BASE_URL}/static/favicon.png`;
-										}}
+											class="px-2 py-1 text-gray-500 rounded-lg text-xs"
+											on:click={() => {
+												info.meta.profile_image_url = `${WEBUI_BASE_URL}/static/chatgpt-logo.svg`;
+											}}
 										type="button"
 									>
 										{$i18n.t('Reset Image')}</button
@@ -676,6 +778,66 @@
 											}
 										}}
 									/>
+								</div>
+							</div>
+
+							<div
+								class="mt-3 rounded-xl border border-gray-100 dark:border-gray-850/70 bg-gray-50/60 dark:bg-gray-900/30 p-3"
+							>
+								<div class="text-xs font-medium text-gray-500 mb-2">
+									{$i18n.t('Usage and reasoning')}
+								</div>
+
+								<div class="grid gap-3">
+									<label class="grid gap-1">
+										<span class="text-xs text-gray-500">{$i18n.t('Model weight')}</span>
+										<input
+											class="w-full text-sm bg-transparent outline-hidden border border-gray-100 dark:border-gray-800 rounded-lg px-2.5 py-1.5"
+											type="text"
+											inputmode="decimal"
+											placeholder="1"
+											bind:value={usageMultiplier}
+										/>
+									</label>
+
+									<label class="grid gap-1">
+										<span class="text-xs text-gray-500">
+											{$i18n.t('Tooltip for blocked reasoning levels')}
+										</span>
+										<input
+											class="w-full text-sm bg-transparent outline-hidden border border-gray-100 dark:border-gray-800 rounded-lg px-2.5 py-1.5"
+											type="text"
+											placeholder={DEFAULT_REASONING_DISABLED_TOOLTIP}
+											bind:value={reasoningEffortDisabledTooltip}
+										/>
+									</label>
+
+									<div class="grid gap-1.5">
+										<div class="text-xs text-gray-500">{$i18n.t('Reasoning levels')}</div>
+
+										{#each REASONING_EFFORT_LEVELS as level}
+											<div
+												class="grid grid-cols-[minmax(5rem,1fr)_minmax(7rem,9rem)] gap-2 items-center"
+											>
+												<label class="flex items-center gap-2 text-sm">
+													<input
+														type="checkbox"
+														class="size-4 rounded border-gray-200 dark:border-gray-700 bg-transparent"
+														bind:checked={reasoningEffortAvailable[level]}
+													/>
+													<span class="font-medium">{level}</span>
+												</label>
+
+												<input
+													class="w-full text-sm bg-transparent outline-hidden border border-gray-100 dark:border-gray-800 rounded-lg px-2.5 py-1.5"
+													type="text"
+													inputmode="decimal"
+													placeholder={$i18n.t('Extra weight')}
+													bind:value={reasoningEffortMultipliers[level]}
+												/>
+											</div>
+										{/each}
+									</div>
 								</div>
 							</div>
 						</div>

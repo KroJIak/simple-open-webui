@@ -23,6 +23,9 @@ from open_webui.config import (
 )
 from open_webui.constants import ERROR_MESSAGES
 from open_webui.env import (
+    AIOHTTP_CLIENT_MAX_FIELD_SIZE,
+    AIOHTTP_CLIENT_MAX_LINE_SIZE,
+    AIOHTTP_CLIENT_READ_BUFSIZE,
     AIOHTTP_CLIENT_SESSION_SSL,
     AIOHTTP_CLIENT_TIMEOUT,
     AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST,
@@ -1220,6 +1223,9 @@ async def generate_chat_completion(
             cookies=cookies,
             ssl=AIOHTTP_CLIENT_SESSION_SSL,
             timeout=aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT),
+            read_bufsize=AIOHTTP_CLIENT_READ_BUFSIZE,
+            max_line_size=AIOHTTP_CLIENT_MAX_LINE_SIZE,
+            max_field_size=AIOHTTP_CLIENT_MAX_FIELD_SIZE,
         )
 
         # Check if response is SSE

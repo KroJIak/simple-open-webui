@@ -224,7 +224,7 @@
 			pinnedModels = [...new Set([...pinnedModels, modelId])];
 		}
 
-		settings.set({ ...$settings, pinnedModels: pinnedModels });
+		settings.set({ ...$settings, pinnedModels: pinnedModels, pinnedModelsCustomized: true });
 		await updateUserSettings(localStorage.token, { ui: $settings });
 	};
 
@@ -604,7 +604,7 @@
 												loading="lazy"
 												decoding="async"
 												on:error={(e) => {
-													e.target.src = '/favicon.png';
+													e.target.src = '/static/chatgpt-logo.svg';
 												}}
 											/>
 										</div>

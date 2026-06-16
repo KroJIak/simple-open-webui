@@ -59,6 +59,7 @@ from open_webui.routers.pipelines import (
 )
 from open_webui.routers.retrieval import (
     SearchForm,
+    _process_web_search,
     process_web_search,
 )
 from open_webui.routers.tasks import (
@@ -1493,12 +1494,14 @@ async def chat_memory_handler(request: Request, form_data: dict, extra_params: d
 
 async def chat_web_search_handler(request: Request, form_data: dict, extra_params: dict, user):
     event_emitter = extra_params['__event_emitter__']
+    features = extra_params.get('__features__', {}) or {}
+    deep_web_search = bool(features.get('deep_web_search') and features.get('web_search'))
     await event_emitter(
         {
             'type': 'status',
             'data': {
                 'action': 'web_search',
-                'description': 'Searching the web',
+                'description': 'Deep web search' if deep_web_search else 'Searching the web',
                 'done': False,
             },
         }
@@ -1585,11 +1588,21 @@ async def chat_web_search_handler(request: Request, form_data: dict, extra_param
     )
 
     try:
-        results = await process_web_search(
-            request,
-            SearchForm(queries=queries),
-            user=user,
-        )
+        if deep_web_search:
+            results = await _process_web_search(
+                request,
+                SearchForm(queries=queries),
+                user=user,
+                result_count=max(request.app.state.config.WEB_SEARCH_RESULT_COUNT or 3, 5),
+                bypass_embedding_and_retrieval=False,
+                bypass_web_loader=False,
+            )
+        else:
+            results = await process_web_search(
+                request,
+                SearchForm(queries=queries),
+                user=user,
+            )
 
         if results:
             files = form_data.get('files', [])
@@ -2548,6 +2561,12 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     features = form_data.pop('features', None) or {}
     extra_params['__features__'] = features
+    request.state.deep_web_search = bool(features.get('deep_web_search') and features.get('web_search'))
+    request.state.native_provider_web_search = bool(
+        features.get('web_search')
+        and getattr(request.app.state.config, 'ENABLE_NATIVE_PROVIDER_WEB_SEARCH', False)
+        and metadata.get('params', {}).get('function_calling') == 'native'
+    )
     if features:
         if 'voice' in features and features['voice']:
             if getattr(request.app.state.config, 'ENABLE_VOICE_MODE_PROMPT', True):
@@ -2567,9 +2586,23 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                 form_data = await chat_memory_handler(request, form_data, extra_params, user)
 
         if 'web_search' in features and features['web_search']:
+            # Prefer the provider's own built-in web_search tool when enabled.
+            if request.state.native_provider_web_search:
+                if request.state.deep_web_search:
+                    form_data['messages'] = add_or_update_system_message(
+                        'Web search is available natively. Search more than once when needed, open multiple promising sources, compare them, and only then answer. Prefer recent primary or reputable sources and call out uncertainty when reports conflict.',
+                        form_data['messages'],
+                        append=True,
+                    )
             # Skip forced RAG web search when native FC is enabled - model can use web_search tool
-            if metadata.get('params', {}).get('function_calling') != 'native':
+            elif metadata.get('params', {}).get('function_calling') != 'native':
                 form_data = await chat_web_search_handler(request, form_data, extra_params, user)
+            elif request.state.deep_web_search:
+                form_data['messages'] = add_or_update_system_message(
+                    'When deep web search is enabled, do not answer after a single search result. Use web search, then open and read multiple promising sources before you answer. Prefer recent primary or reputable sources, compare them, and only then produce the final answer.',
+                    form_data['messages'],
+                    append=True,
+                )
 
         if 'image_generation' in features and features['image_generation']:
             # Skip forced image generation when native FC is enabled - model can use generate_image tool
@@ -2882,6 +2915,15 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                     sources.extend(flags.get('sources', []))
                 except Exception as e:
                     log.exception(e)
+
+        if request.state.native_provider_web_search:
+            native_web_search_tool = {'type': 'web_search'}
+            existing_tools = form_data.get('tools', [])
+            if not any(
+                isinstance(tool, dict) and tool.get('type') == 'web_search'
+                for tool in existing_tools
+            ):
+                form_data['tools'] = [*existing_tools, native_web_search_tool]
 
     # Check if file context extraction is enabled for this model (default True)
     file_context_enabled = (model.get('info', {}).get('meta', {}).get('capabilities') or {}).get('file_context', True)

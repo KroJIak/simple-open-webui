@@ -1,7 +1,7 @@
 <script>
 	import Sortable from 'sortablejs';
 
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 
 	import { chatId, config, mobile, models, settings, showSidebar } from '$lib/stores';
 	import { WEBUI_BASE_URL } from '$lib/constants';
@@ -13,6 +13,22 @@
 
 	let pinnedModels = [];
 
+	const isVisibleModel = (id) => {
+		const model = $models.find((m) => m.id === id);
+		return model && !(model?.info?.meta?.hidden ?? false);
+	};
+
+	const getDefaultPinnedModels = () =>
+		($config?.default_pinned_models ?? '').split(',').filter((id) => id).filter(isVisibleModel);
+
+	const getEffectivePinnedModels = () => {
+		if ($settings?.pinnedModelsCustomized === true) {
+			return ($settings?.pinnedModels ?? []).filter(isVisibleModel);
+		}
+
+		return getDefaultPinnedModels();
+	};
+
 	const initPinnedModelsSortable = () => {
 		const pinnedModelsList = document.getElementById('pinned-models-list');
 		if (pinnedModelsList && !$mobile) {
@@ -22,63 +38,48 @@
 					const modelId = event.item.dataset.id;
 					const newIndex = event.newIndex;
 
-					const pinnedModels = $settings.pinnedModels;
+					const pinnedModels = [...getEffectivePinnedModels()];
 					const oldIndex = pinnedModels.indexOf(modelId);
 
 					pinnedModels.splice(oldIndex, 1);
 					pinnedModels.splice(newIndex, 0, modelId);
 
-					settings.set({ ...$settings, pinnedModels: pinnedModels });
+					settings.set({
+						...$settings,
+						pinnedModels: pinnedModels,
+						pinnedModelsCustomized: true
+					});
 					await updateUserSettings(localStorage.token, { ui: $settings });
 				}
 			});
 		}
 	};
 
-	let unsubscribeSettings;
-
 	const cleanupStalePinnedModels = async (modelIds) => {
-		const validModels = modelIds.filter((id) => {
-			const model = $models.find((m) => m.id === id);
-			// Remove if model not found (deleted) or if hidden
-			return model && !(model?.info?.meta?.hidden ?? false);
-		});
+		const validModels = modelIds.filter(isVisibleModel);
 
 		if (validModels.length !== modelIds.length) {
 			pinnedModels = validModels;
-			settings.set({ ...$settings, pinnedModels: validModels });
-			await updateUserSettings(localStorage.token, { ui: $settings });
+			if ($settings?.pinnedModelsCustomized === true) {
+				settings.set({
+					...$settings,
+					pinnedModels: validModels,
+					pinnedModelsCustomized: true
+				});
+				await updateUserSettings(localStorage.token, { ui: $settings });
+			}
 		}
 	};
 
+	$: pinnedModels = getEffectivePinnedModels();
+
 	onMount(async () => {
-		pinnedModels = $settings?.pinnedModels ?? [];
-
-		if (pinnedModels.length === 0 && $config?.default_pinned_models) {
-			const defaultPinnedModels = ($config?.default_pinned_models).split(',').filter((id) => id);
-			pinnedModels = defaultPinnedModels.filter((id) => $models.find((model) => model.id === id));
-
-			settings.set({ ...$settings, pinnedModels });
-			await updateUserSettings(localStorage.token, { ui: $settings });
-		}
-
-		// Auto-unpin hidden or deleted models
 		if (pinnedModels.length > 0) {
 			await cleanupStalePinnedModels(pinnedModels);
 		}
 
-		unsubscribeSettings = settings.subscribe((value) => {
-			pinnedModels = value?.pinnedModels ?? [];
-		});
-
 		await tick();
 		initPinnedModelsSortable();
-	});
-
-	onDestroy(() => {
-		if (unsubscribeSettings) {
-			unsubscribeSettings();
-		}
 	});
 </script>
 
@@ -96,13 +97,15 @@
 						showSidebar.set(false);
 					}
 				}}
-				onUnpin={($settings?.pinnedModels ?? []).includes(modelId)
-					? () => {
-							const pinnedModels = $settings.pinnedModels.filter((id) => id !== modelId);
-							settings.set({ ...$settings, pinnedModels });
-							updateUserSettings(localStorage.token, { ui: $settings });
-						}
-					: null}
+				onUnpin={() => {
+					const nextPinnedModels = getEffectivePinnedModels().filter((id) => id !== modelId);
+					settings.set({
+						...$settings,
+						pinnedModels: nextPinnedModels,
+						pinnedModelsCustomized: true
+					});
+					updateUserSettings(localStorage.token, { ui: $settings });
+				}}
 			/>
 		{/if}
 	{/each}

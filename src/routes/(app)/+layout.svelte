@@ -204,15 +204,16 @@
 		clearChatInputStorage();
 		await Promise.all([
 			checkLocalDBChats(),
-			setBanners().catch((e) => console.error('Failed to load banners:', e)),
-			setTools().catch((e) => console.error('Failed to load tools:', e)),
-			setUserSettings(async () => {
-				await Promise.all([
-					setModels().catch((e) => console.error('Failed to load models:', e)),
-					setToolServers().catch((e) => console.error('Failed to load tool servers:', e))
-				]);
-			}).catch((e) => console.error('Failed to load user settings:', e))
+			setUserSettings().catch((e) => console.error('Failed to load user settings:', e))
 		]);
+
+		// Don't block the initial app render on remote provider discovery.
+		// Some providers respond very slowly on /models, which delays the chat input
+		// even though the rest of the interface can render immediately.
+		void setBanners().catch((e) => console.error('Failed to load banners:', e));
+		void setTools().catch((e) => console.error('Failed to load tools:', e));
+		void setModels().catch((e) => console.error('Failed to load models:', e));
+		void setToolServers().catch((e) => console.error('Failed to load tool servers:', e));
 
 		// Helper function to check if the pressed keys match the shortcut definition
 		const isShortcutMatch = (event: KeyboardEvent, shortcut): boolean => {
@@ -394,7 +395,7 @@
 {#if $user}
 	<div class="app relative">
 		<div
-			class=" text-gray-700 dark:text-gray-100 bg-white dark:bg-gray-900 h-screen max-h-[100dvh] overflow-auto flex flex-row justify-end"
+			class=" text-gray-700 dark:text-gray-100 bg-white dark:bg-gray-950 h-screen max-h-[100dvh] overflow-auto flex flex-row justify-end"
 		>
 			{#if !['user', 'admin'].includes($user?.role)}
 				<AccountPending />

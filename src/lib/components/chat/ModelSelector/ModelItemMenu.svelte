@@ -21,6 +21,13 @@
 	export let deleteModelHandler: Function = () => {};
 
 	export let onClose: Function = () => {};
+
+	const getEffectivePinnedModelIds = () =>
+		$settings?.pinnedModelsCustomized === true
+			? ($settings?.pinnedModels ?? [])
+			: (($config?.default_pinned_models ?? '').split(',').filter((id) => id));
+
+	$: isPinned = getEffectivePinnedModelIds().includes(model?.id);
 </script>
 
 <Dropdown
@@ -103,7 +110,7 @@
 
 			<button
 				type="button"
-				aria-pressed={($settings?.pinnedModels ?? []).includes(model?.id)}
+				aria-pressed={isPinned}
 				class="select-none flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition items-center gap-2"
 				on:click={(e) => {
 					e.stopPropagation();
@@ -113,14 +120,14 @@
 					show = false;
 				}}
 			>
-				{#if ($settings?.pinnedModels ?? []).includes(model?.id)}
+				{#if isPinned}
 					<PinSlash />
 				{:else}
 					<Pin />
 				{/if}
 
 				<div class="flex items-center">
-					{#if ($settings?.pinnedModels ?? []).includes(model?.id)}
+					{#if isPinned}
 						{$i18n.t('Hide from Sidebar')}
 					{:else}
 						{$i18n.t('Keep in Sidebar')}

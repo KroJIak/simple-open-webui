@@ -1,5 +1,18 @@
 import { OPENAI_API_BASE_URL, WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 
+const getLocaleHeaders = () => {
+	const browserLocale =
+		typeof navigator !== 'undefined' ? navigator.language || 'en-US' : 'en-US';
+	const locale =
+		typeof localStorage !== 'undefined'
+			? localStorage.getItem('locale') || browserLocale
+			: 'en-US';
+
+	return {
+		'X-OpenWebUI-Locale': locale
+	};
+};
+
 export const getOpenAIConfig = async (token: string = '') => {
 	let error = null;
 
@@ -209,7 +222,8 @@ export const chatCompletion = async (
 		method: 'POST',
 		headers: {
 			Authorization: `Bearer ${token}`,
-			'Content-Type': 'application/json'
+			'Content-Type': 'application/json',
+			...getLocaleHeaders()
 		},
 		body: JSON.stringify(body)
 	}).catch((err) => {
@@ -236,7 +250,8 @@ export const generateOpenAIChatCompletion = async (
 		method: 'POST',
 		headers: {
 			Authorization: `Bearer ${token}`,
-			'Content-Type': 'application/json'
+			'Content-Type': 'application/json',
+			...getLocaleHeaders()
 		},
 		credentials: 'include',
 		body: JSON.stringify(body)

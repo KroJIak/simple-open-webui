@@ -510,6 +510,7 @@
 									>
 										<option value="">{$i18n.t('Default')}</option>
 										<option value="azure">{$i18n.t('Azure OpenAI')}</option>
+										<option value="codex_cli">{$i18n.t('Codex CLI')}</option>
 										<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
 									</select>
 								</div>

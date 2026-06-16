@@ -534,6 +534,7 @@ async def get_builtin_tools(
     if (
         is_builtin_tool_enabled('web_search')
         and getattr(request.app.state.config, 'ENABLE_WEB_SEARCH', False)
+        and not bool(getattr(request.state, 'native_provider_web_search', False))
         and get_model_capability('web_search')
         and features.get('web_search')
         and await has_user_permission('web_search')

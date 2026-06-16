@@ -61,7 +61,7 @@
 								alt="logo"
 								draggable="false"
 								on:error={(e) => {
-									e.currentTarget.src = '/favicon.png';
+									e.currentTarget.src = '/static/chatgpt-logo.svg';
 								}}
 							/>
 						</Tooltip>
@@ -124,7 +124,7 @@
 							</div>
 						{/if}
 					{:else}
-						<div class=" text-gray-400 dark:text-gray-500 line-clamp-1 font-p">
+						<div class="text-[15px] text-gray-400 dark:text-gray-500 line-clamp-1 font-p">
 							{$i18n.t('How can I help you today?')}
 						</div>
 					{/if}

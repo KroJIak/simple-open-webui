@@ -1,6 +1,6 @@
 {
-  "name": "Open WebUI",
-  "short_name": "WebUI",
+  "name": "Чат ХэПэТэ",
+  "short_name": "Чат ХэПэТэ",
   "icons": [
     {
       "src": "/static/web-app-manifest-192x192.png",
