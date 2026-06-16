@@ -1,37 +1,4 @@
 services:
-  codex-proxy:
-    image: ghcr.io/icebear0828/codex-proxy:v2.0.82
-    container_name: codex-proxy
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    ports:
-      - 127.0.0.1:${CODEX_PROXY_PORT-18080}:8080
-      - 127.0.0.1:${CODEX_PROXY_OAUTH_PORT-1455}:1455
-    environment:
-      - NODE_ENV=production
-      - PORT=8080
-      - CODEX_PROXY_HOST=0.0.0.0
-      - CODEX_PROXY_API_KEY=${CODEX_PROXY_API_KEY}
-      - CODEX_PLATFORM=${CODEX_PLATFORM}
-      - CODEX_ARCH=${CODEX_ARCH}
-      - CODEX_JWT_TOKEN=${CODEX_JWT_TOKEN}
-    command:
-      - sh
-      - -lc
-      - |
-        set -eu
-        key="$${CODEX_PROXY_API_KEY:?CODEX_PROXY_API_KEY is required}"
-        mkdir -p /app/data
-        cat > /app/data/local.yaml <<EOF
-        server:
-          proxy_api_key: $$key
-        EOF
-        exec node dist/index.js
-    volumes:
-      - codex-proxy-data:/app/data
-      - codex-proxy-config:/app/config
-    restart: unless-stopped
-
   cliproxyapi:
     image: eceasy/cli-proxy-api:latest
     container_name: cliproxyapi
@@ -151,22 +118,19 @@ services:
       - 'BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL=${BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL}'
       - 'WEB_LOADER_TIMEOUT=${WEB_LOADER_TIMEOUT}'
       - 'ENABLE_SEARCH_QUERY_GENERATION=${ENABLE_SEARCH_QUERY_GENERATION}'
+      - 'DATABASE_URL=${DATABASE_URL}'
       - 'USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS=${USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS}'
       - 'USER_PERMISSIONS_WORKSPACE_KNOWLEDGE_ACCESS=${USER_PERMISSIONS_WORKSPACE_KNOWLEDGE_ACCESS}'
       - 'USER_PERMISSIONS_WORKSPACE_PROMPTS_ACCESS=${USER_PERMISSIONS_WORKSPACE_PROMPTS_ACCESS}'
       - 'USER_PERMISSIONS_WORKSPACE_SKILLS_ACCESS=${USER_PERMISSIONS_WORKSPACE_SKILLS_ACCESS}'
       - 'USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS=${USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS}'
       - 'USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS=${USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS}'
-      - 'WEBUI_SECRET_KEY='
+      - 'WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}'
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
 
 volumes:
-  codex-proxy-data:
-    name: codex-proxy-data
-  codex-proxy-config:
-    name: codex-proxy-config
   cliproxyapi-auths:
     name: cliproxyapi-auths
   cliproxyapi-logs:
