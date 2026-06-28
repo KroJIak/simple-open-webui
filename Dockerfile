@@ -27,8 +27,8 @@ ARG GID=0
 FROM --platform=$BUILDPLATFORM node:22-alpine3.20 AS build
 ARG BUILD_HASH
 
-# Cap V8 heap to fit small VPS builds instead of letting the kernel OOM-kill Vite.
-ENV NODE_OPTIONS="--max-old-space-size=3072"
+# Keep V8 heap high enough for this frontend build, but still bounded for a small VPS.
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 ENV CYPRESS_INSTALL_BINARY=0
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
