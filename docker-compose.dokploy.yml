@@ -1,0 +1,10 @@
+services:
+  open-webui:
+    networks:
+      - default
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true
+    name: dokploy-network
