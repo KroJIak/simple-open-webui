@@ -135,6 +135,4 @@ volumes:
     name: cliproxyapi-auths
   cliproxyapi-logs:
     name: cliproxyapi-logs
-  open-webui:
-    external: true
-    name: open-webui
+  open-webui: {}
