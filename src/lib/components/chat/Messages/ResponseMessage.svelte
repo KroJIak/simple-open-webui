@@ -1385,7 +1385,9 @@
 
 								{#if message.done}
 									<div
-										class="ml-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap"
+										class="{isLastMessage || ($settings?.highContrastMode ?? false)
+											? 'flex'
+											: 'hidden group-hover:flex'} ml-1 items-center gap-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap"
 									>
 										<Tooltip content={model?.name ?? message.model} placement="bottom">
 											<span id="response-message-model-name" class="line-clamp-1 max-w-[13rem]">
