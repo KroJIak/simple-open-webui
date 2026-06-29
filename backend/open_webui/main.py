@@ -1980,6 +1980,23 @@ async def chat_completion(
                             detail=ERROR_MESSAGES.DEFAULT(),
                         )
 
+                    # A hard reload can replay the same request from the frontend.
+                    # If these assistant placeholders already exist for this chat,
+                    # treat the request as a duplicate and do not enqueue a second run.
+                    all_assistant_ids = [assistant_id for assistant_id in message_ids.values() if assistant_id]
+                    existing_assistant_messages = []
+                    for assistant_message_id in all_assistant_ids:
+                        existing_assistant_messages.append(
+                            await Chats.get_message_by_id_and_message_id(chat_id, assistant_message_id)
+                        )
+
+                    if all_assistant_ids and all(existing_assistant_messages):
+                        return {
+                            'status': True,
+                            'task_ids': await list_task_ids_by_item_id(request.app.state.redis, chat_id),
+                            'chat_id': chat_id,
+                        }
+
                     # Persist chat-level files (knowledge collections, docs, etc.)
                     # The old frontend saveChatHandler did this on every message;
                     # now the backend owns persistence.
