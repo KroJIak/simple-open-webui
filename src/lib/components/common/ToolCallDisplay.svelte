@@ -3,6 +3,7 @@
 	import { v4 as uuidv4 } from 'uuid';
 
 	import { getContext } from 'svelte';
+	import { writable, type Writable } from 'svelte/store';
 	const i18n = getContext('i18n');
 
 	import { slide } from 'svelte/transition';
@@ -36,6 +37,8 @@
 
 	const RESULT_PREVIEW_LIMIT = 10000;
 	let expandedResult = false;
+	const displayedFileUrlsStore =
+		getContext<Writable<string[]>>('responseMessageDisplayedFileUrls') ?? writable([]);
 
 	$: if (!open) expandedResult = false;
 	export let buttonClassName =
@@ -84,6 +87,9 @@
 	$: embeds = parseJSONString(decode(attributes?.embeds ?? ''));
 	$: isDone = attributes?.done === 'true';
 	$: isExecuting = attributes?.done && attributes?.done !== 'true';
+	$: displayedFileUrlSet = new Set(
+		($displayedFileUrlsStore ?? []).filter((url) => typeof url === 'string')
+	);
 
 	$: parsedArgs = parseArguments(args);
 	$: parsedResult = parseJSONString(result);
@@ -258,11 +264,11 @@
 		{#if typeof files === 'object'}
 			{#each files ?? [] as file, idx}
 				{#if typeof file === 'string'}
-					{#if file.startsWith('data:image/')}
+					{#if file.startsWith('data:image/') && !displayedFileUrlSet.has(file)}
 						<Image id={`${componentId}-tool-call-result-${idx}`} src={file} alt="Image" />
 					{/if}
 				{:else if typeof file === 'object'}
-					{#if (file.type === 'image' || (file?.content_type ?? '').startsWith('image/')) && file.url}
+					{#if (file.type === 'image' || (file?.content_type ?? '').startsWith('image/')) && file.url && !displayedFileUrlSet.has(file.url)}
 						<Image id={`${componentId}-tool-call-result-${idx}`} src={file.url} alt="Image" />
 					{/if}
 				{/if}

@@ -3,8 +3,8 @@
 	import dayjs from 'dayjs';
 
 	import { createEventDispatcher, onDestroy } from 'svelte';
-	import { onMount, tick, getContext } from 'svelte';
-	import type { Writable } from 'svelte/store';
+	import { onMount, tick, getContext, setContext } from 'svelte';
+	import { writable, type Writable } from 'svelte/store';
 	import type { i18n as i18nType, t } from 'i18next';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
@@ -113,6 +113,14 @@
 		};
 		annotation?: { type: string; rating: number };
 	}
+
+	const displayedFileUrls = writable<string[]>([]);
+	setContext('responseMessageDisplayedFileUrls', displayedFileUrls);
+	$: displayedFileUrls.set(
+		message?.files
+			?.filter((file) => ['image', 'file'].includes(file.type) && file.url)
+			.map((file) => file.url) ?? []
+	);
 
 	export let chatId = '';
 	export let history;
