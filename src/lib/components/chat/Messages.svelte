@@ -24,7 +24,7 @@
 
 	const i18n = getContext('i18n');
 
-export let className = 'h-full flex pt-12';
+	export let className = 'h-full flex pt-12';
 
 	export let chatId = '';
 	export let user = $_user;
@@ -478,65 +478,90 @@ export let className = 'h-full flex pt-12';
 </script>
 
 <div class={className}>
-	{#if Object.keys(history?.messages ?? {}).length == 0}
-		<ChatPlaceholder modelIds={selectedModels} {atSelectedModel} {onSelect} />
-	{:else}
-		<div class="w-full pt-2">
-			{#key chatId}
-				<section class="w-full" aria-labelledby="chat-conversation">
-					<h2 class="sr-only" id="chat-conversation">{$i18n.t('Chat Conversation')}</h2>
-					{#if messages.at(0)?.parentId !== null}
-						<Loader
-							on:visible={(e) => {
-								console.log('visible');
-								if (!messagesLoading) {
-									loadMoreMessages();
-								}
-							}}
-						>
-							<div class="w-full flex justify-center py-1 text-xs animate-pulse items-center gap-2">
-								<Spinner className=" size-4" />
-								<div class=" ">{$i18n.t('Loading...')}</div>
-							</div>
-						</Loader>
+	<div class="chat-content-scale w-full">
+		{#if Object.keys(history?.messages ?? {}).length == 0}
+			<ChatPlaceholder modelIds={selectedModels} {atSelectedModel} {onSelect} />
+		{:else}
+			<div class="w-full pt-2">
+				{#key chatId}
+					<section class="w-full" aria-labelledby="chat-conversation">
+						<h2 class="sr-only" id="chat-conversation">{$i18n.t('Chat Conversation')}</h2>
+						{#if messages.at(0)?.parentId !== null}
+							<Loader
+								on:visible={(e) => {
+									console.log('visible');
+									if (!messagesLoading) {
+										loadMoreMessages();
+									}
+								}}
+							>
+								<div
+									class="w-full flex justify-center py-1 text-xs animate-pulse items-center gap-2"
+								>
+									<Spinner className=" size-4" />
+									<div class=" ">{$i18n.t('Loading...')}</div>
+								</div>
+							</Loader>
+						{/if}
+						<ul role="log" aria-live="polite" aria-relevant="additions" aria-atomic="false">
+							{#each messages as message, messageIdx (message.id)}
+								<Message
+									{chatId}
+									bind:history
+									{selectedModels}
+									messageId={message.id}
+									idx={messageIdx}
+									{user}
+									{setInputText}
+									{gotoMessage}
+									{showPreviousMessage}
+									{showNextMessage}
+									{updateChat}
+									{editMessage}
+									{deleteMessage}
+									{rateMessage}
+									{actionMessage}
+									{saveMessage}
+									{submitMessage}
+									{regenerateResponse}
+									{continueResponse}
+									{mergeResponses}
+									{addMessages}
+									{triggerScroll}
+									{readOnly}
+									{editCodeBlock}
+									{topPadding}
+								/>
+							{/each}
+						</ul>
+					</section>
+					<div class="pb-18" />
+					{#if bottomPadding}
+						<div class="  pb-6" />
 					{/if}
-					<ul role="log" aria-live="polite" aria-relevant="additions" aria-atomic="false">
-						{#each messages as message, messageIdx (message.id)}
-							<Message
-								{chatId}
-								bind:history
-								{selectedModels}
-								messageId={message.id}
-								idx={messageIdx}
-								{user}
-								{setInputText}
-								{gotoMessage}
-								{showPreviousMessage}
-								{showNextMessage}
-								{updateChat}
-								{editMessage}
-								{deleteMessage}
-								{rateMessage}
-								{actionMessage}
-								{saveMessage}
-								{submitMessage}
-								{regenerateResponse}
-								{continueResponse}
-								{mergeResponses}
-								{addMessages}
-								{triggerScroll}
-								{readOnly}
-								{editCodeBlock}
-								{topPadding}
-							/>
-						{/each}
-					</ul>
-				</section>
-				<div class="pb-18" />
-				{#if bottomPadding}
-					<div class="  pb-6" />
-				{/if}
-			{/key}
-		</div>
-	{/if}
+				{/key}
+			</div>
+		{/if}
+	</div>
 </div>
+
+<style>
+	.chat-content-scale {
+		--chat-content-scale: 1.1;
+		transform-origin: top center;
+	}
+
+	@supports (zoom: 1.1) {
+		.chat-content-scale {
+			zoom: var(--chat-content-scale);
+			width: calc(100% / var(--chat-content-scale));
+			margin-inline: auto;
+		}
+	}
+
+	@supports not (zoom: 1.1) {
+		.chat-content-scale {
+			font-size: calc(1rem * var(--chat-content-scale));
+		}
+	}
+</style>
