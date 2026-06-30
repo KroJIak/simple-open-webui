@@ -9,6 +9,9 @@ from open_webui.utils.misc import (
 )
 from open_webui.utils.task import prompt_template, prompt_variables_template
 
+REASONING_EFFORT_LEVELS = ('low', 'medium', 'high', 'xhigh')
+REASONING_EFFORT_FALLBACK_ORDER = ('medium', 'low', 'high', 'xhigh')
+
 
 # What goes out cannot be taken back. Let it be shaped
 # well before it leaves this place.
@@ -82,8 +85,48 @@ def remove_open_webui_params(params: dict) -> dict:
     return params
 
 
+def get_reasoning_effort_available_levels(model_meta: Optional[dict]) -> list[str]:
+    reasoning_settings = (
+        model_meta.get('reasoning_effort_settings', {}) if isinstance(model_meta, dict) else {}
+    )
+    available = reasoning_settings.get('available')
+
+    if not isinstance(available, list):
+        return list(REASONING_EFFORT_LEVELS)
+
+    return [level for level in available if level in REASONING_EFFORT_LEVELS]
+
+
+def get_default_reasoning_effort(model_meta: Optional[dict]) -> Optional[str]:
+    available_levels = get_reasoning_effort_available_levels(model_meta)
+
+    for level in REASONING_EFFORT_FALLBACK_ORDER:
+        if level in available_levels:
+            return level
+
+    return available_levels[0] if available_levels else None
+
+
+def sanitize_reasoning_effort_for_model(form_data: dict, model_meta: Optional[dict] = None) -> dict:
+    value = form_data.get('reasoning_effort')
+    if value is None:
+        return form_data
+
+    available_levels = get_reasoning_effort_available_levels(model_meta)
+    if isinstance(value, str) and value in available_levels:
+        return form_data
+
+    fallback_level = get_default_reasoning_effort(model_meta)
+    if fallback_level is None:
+        form_data.pop('reasoning_effort', None)
+    else:
+        form_data['reasoning_effort'] = fallback_level
+
+    return form_data
+
+
 # inplace function: form_data is modified
-def apply_model_params_to_body_openai(params: dict, form_data: dict) -> dict:
+def apply_model_params_to_body_openai(params: dict, form_data: dict, model_meta: Optional[dict] = None) -> dict:
     params = remove_open_webui_params(params)
 
     custom_params = params.pop('custom_params', {})
@@ -114,7 +157,8 @@ def apply_model_params_to_body_openai(params: dict, form_data: dict) -> dict:
         'logit_bias': lambda x: x,
         'response_format': dict,
     }
-    return apply_model_params_to_body(params, form_data, mappings)
+    form_data = apply_model_params_to_body(params, form_data, mappings)
+    return sanitize_reasoning_effort_for_model(form_data, model_meta)
 
 
 def apply_model_params_to_body_ollama(params: dict, form_data: dict) -> dict:

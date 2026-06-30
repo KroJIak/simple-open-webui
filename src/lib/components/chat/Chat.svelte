@@ -165,13 +165,59 @@
 	const CODEX_CLI_PROVIDER = 'codex_cli';
 	const DEFAULT_CODEX_REASONING_EFFORT = 'medium';
 	const REASONING_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'] as const;
+	const REASONING_EFFORT_FALLBACK_ORDER = [
+		DEFAULT_CODEX_REASONING_EFFORT,
+		...REASONING_EFFORT_LEVELS.filter((level) => level !== DEFAULT_CODEX_REASONING_EFFORT)
+	] as const;
 
 	const getModelProvider = (model: Model | undefined) =>
 		(model?.provider ?? (model as any)?.openai?.provider ?? '') as string;
 
+	const getModelMeta = (model: Model | undefined) =>
+		((model as any)?.info?.meta ?? (model as any)?.meta ?? {}) as Record<string, any>;
+
 	const hasValidReasoningEffort = (value: unknown): value is (typeof REASONING_EFFORT_LEVELS)[number] =>
 		typeof value === 'string' &&
 		REASONING_EFFORT_LEVELS.includes(value as (typeof REASONING_EFFORT_LEVELS)[number]);
+
+	const getReasoningEffortAvailableLevels = (model: Model | undefined) => {
+		const available = getModelMeta(model)?.reasoning_effort_settings?.available;
+		if (!Array.isArray(available)) return [...REASONING_EFFORT_LEVELS];
+
+		return available.filter((level) =>
+			REASONING_EFFORT_LEVELS.includes(level as (typeof REASONING_EFFORT_LEVELS)[number])
+		);
+	};
+
+	const getAllowedReasoningEffortLevels = (modelIds: string[] = []) => {
+		if (modelIds.length === 0) {
+			return [...REASONING_EFFORT_LEVELS];
+		}
+
+		const selectedModels = modelIds
+			.map((modelId) => $models.find((item) => item.id === modelId))
+			.filter((model) => model !== undefined);
+
+		if (selectedModels.length !== modelIds.length) {
+			return [...REASONING_EFFORT_LEVELS];
+		}
+
+		return REASONING_EFFORT_LEVELS.filter((level) =>
+			selectedModels.every((model) => getReasoningEffortAvailableLevels(model).includes(level))
+		);
+	};
+
+	const getDefaultReasoningEffortForModels = (modelIds: string[] = []) => {
+		const allowedLevels = getAllowedReasoningEffortLevels(modelIds);
+
+		for (const level of REASONING_EFFORT_FALLBACK_ORDER) {
+			if (allowedLevels.includes(level)) {
+				return level;
+			}
+		}
+
+		return allowedLevels[0] ?? null;
+	};
 
 	const areAllModelIdsCodexCli = (modelIds: string[] = []) => {
 		if (modelIds.length === 0) {
@@ -186,9 +232,26 @@
 
 	const normalizeChatParams = (rawParams: Record<string, any> = {}, modelIds: string[] = []) => {
 		const nextParams = { ...(rawParams ?? {}) };
+		const allowedReasoningEffortLevels = getAllowedReasoningEffortLevels(modelIds);
+		const currentReasoningEffort = nextParams.reasoning_effort;
+		const currentReasoningEffortIsAllowed =
+			hasValidReasoningEffort(currentReasoningEffort) &&
+			allowedReasoningEffortLevels.includes(currentReasoningEffort);
 
-		if (areAllModelIdsCodexCli(modelIds) && !hasValidReasoningEffort(nextParams.reasoning_effort)) {
-			nextParams.reasoning_effort = DEFAULT_CODEX_REASONING_EFFORT;
+		if (!currentReasoningEffortIsAllowed) {
+			if (
+				areAllModelIdsCodexCli(modelIds) ||
+				allowedReasoningEffortLevels.length !== REASONING_EFFORT_LEVELS.length
+			) {
+				const fallbackReasoningEffort = getDefaultReasoningEffortForModels(modelIds);
+				if (fallbackReasoningEffort) {
+					nextParams.reasoning_effort = fallbackReasoningEffort;
+				} else {
+					delete nextParams.reasoning_effort;
+				}
+			} else if (currentReasoningEffort !== undefined) {
+				delete nextParams.reasoning_effort;
+			}
 		}
 
 		return nextParams;
@@ -289,8 +352,11 @@
 		deepWebSearchEnabled = false;
 	}
 
-	$: if (areAllModelIdsCodexCli(currentModelIds) && !hasValidReasoningEffort(params?.reasoning_effort)) {
-		params = normalizeChatParams(params, currentModelIds);
+	$: {
+		const normalizedParams = normalizeChatParams(params, currentModelIds);
+		if ((params?.reasoning_effort ?? null) !== (normalizedParams?.reasoning_effort ?? null)) {
+			params = normalizedParams;
+		}
 	}
 
 	let showCommands = false;

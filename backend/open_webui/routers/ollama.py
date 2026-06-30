@@ -1115,7 +1115,7 @@ async def generate_openai_completion(
             payload['model'] = model_info.base_model_id
         params = model_info.params.model_dump()
         if params:
-            payload = apply_model_params_to_body_openai(params, payload)
+            payload = apply_model_params_to_body_openai(params, payload, model_info.meta.model_dump())
         await check_model_access(user, model_info)
     else:
         await check_model_access(user, None)
@@ -1170,7 +1170,7 @@ async def generate_openai_chat_completion(
         params = model_info.params.model_dump()
         if params:
             system = params.pop('system', None)
-            payload = apply_model_params_to_body_openai(params, payload)
+            payload = apply_model_params_to_body_openai(params, payload, model_info.meta.model_dump())
             payload = await apply_system_prompt_to_body(system, payload, metadata, user)
 
         await check_model_access(user, model_info)

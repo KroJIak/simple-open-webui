@@ -1095,7 +1095,7 @@ async def generate_chat_completion(
         if params:
             system = params.pop('system', None)
 
-            payload = apply_model_params_to_body_openai(params, payload)
+            payload = apply_model_params_to_body_openai(params, payload, model_info.meta.model_dump())
             if not bypass_system_prompt:
                 payload = await apply_system_prompt_to_body(system, payload, metadata, user)
 
