@@ -1,10 +1,6 @@
 <script lang="ts">
-	import { toast } from 'svelte-sonner';
-	import { marked } from 'marked';
-	import DOMPurify from 'dompurify';
-
-	import { onMount, getContext, tick, createEventDispatcher } from 'svelte';
-	import { blur, fade } from 'svelte/transition';
+	import { getContext, createEventDispatcher } from 'svelte';
+	import { fade } from 'svelte/transition';
 
 	const dispatch = createEventDispatcher();
 
@@ -20,9 +16,6 @@
 		chats,
 		currentChatPage
 	} from '$lib/stores';
-	import { sanitizeResponseContent, extractCurlyBraceWords } from '$lib/utils';
-	import { WEBUI_BASE_URL } from '$lib/constants';
-
 	import Suggestions from './Suggestions.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
@@ -84,14 +77,14 @@
 			className="w-full flex justify-center mb-0.5"
 			placement="top"
 		>
-			<div class="flex items-center gap-2 text-gray-500 text-base my-2 w-fit">
+			<div class="flex items-center gap-2 text-gray-500 dark:text-white text-base my-2 w-fit">
 				<EyeSlash strokeWidth="2.5" className="size-4" />{$i18n.t('Temporary Chat')}
 			</div>
 		</Tooltip>
 	{/if}
 
 	<div
-		class="w-full text-3xl text-gray-800 dark:text-gray-100 text-center flex items-center gap-4 font-primary"
+		class="w-full text-3xl text-gray-800 dark:text-white text-center flex items-center gap-4 font-primary"
 	>
 		<div class="w-full flex flex-col justify-center items-center">
 			{#if $selectedFolder}
@@ -115,71 +108,27 @@
 							class="absolute inset-x-0 bottom-full mb-4 flex flex-col items-center"
 							in:fade={{ duration: 100 }}
 						>
-							<div class="text-3xl @sm:text-3xl line-clamp-1 flex items-center justify-center px-5 max-w-xl">
-								{#if models[selectedModelIdx]?.name}
-									<Tooltip
-										content={models[selectedModelIdx]?.name}
-										placement="top"
-										className="flex items-center"
-									>
-										<span class="line-clamp-1">
-											{models[selectedModelIdx]?.name}
-										</span>
-									</Tooltip>
-								{:else}
-									{$i18n.t('Hello, {{name}}', { name: $user?.name })}
-								{/if}
+							<div
+								class="text-3xl @sm:text-3xl line-clamp-1 flex items-center justify-center px-5 max-w-xl"
+							>
+								{$i18n.t('Hello, {{name}}', { name: $user?.name })}
 							</div>
 
 							<div class="flex mt-1 mb-2">
-								<div in:fade={{ duration: 100, delay: 50 }}>
-									{#if models[selectedModelIdx]?.info?.meta?.description ?? null}
-										<Tooltip
-											className="w-fit"
-											content={DOMPurify.sanitize(
-												marked.parse(
-													sanitizeResponseContent(
-														models[selectedModelIdx]?.info?.meta?.description ?? ''
-													).replaceAll('\n', '<br>')
-												)
-											)}
-											placement="top"
-										>
-											<div
-												class="mt-0.5 px-2 text-sm font-normal text-gray-500 dark:text-gray-400 line-clamp-2 max-w-xl markdown"
-											>
-												{@html DOMPurify.sanitize(
-													marked.parse(
-														sanitizeResponseContent(
-															models[selectedModelIdx]?.info?.meta?.description ?? ''
-														).replaceAll('\n', '<br>')
-													)
-												)}
-											</div>
-										</Tooltip>
-
-										{#if models[selectedModelIdx]?.info?.meta?.user}
-											<div class="mt-0.5 text-sm font-normal text-gray-400 dark:text-gray-500">
-												By
-												{#if models[selectedModelIdx]?.info?.meta?.user.community}
-													<a
-														href="https://openwebui.com/m/{models[selectedModelIdx]?.info?.meta?.user
-															.username}"
-														>{models[selectedModelIdx]?.info?.meta?.user.name
-															? models[selectedModelIdx]?.info?.meta?.user.name
-															: `@${models[selectedModelIdx]?.info?.meta?.user.username}`}</a
-													>
-												{:else}
-													{models[selectedModelIdx]?.info?.meta?.user.name}
-												{/if}
-											</div>
-										{/if}
-									{/if}
+								<div
+									in:fade={{ duration: 100, delay: 50 }}
+									class="mt-0.5 px-2 text-sm font-normal text-gray-500 dark:text-white line-clamp-2 max-w-xl markdown"
+								>
+									{$i18n.t('How can I help you today?')}
 								</div>
 							</div>
 						</div>
 
-						<div class="text-[15px] font-normal @md:max-w-3xl w-full py-3 {atSelectedModel ? 'mt-2' : ''}">
+						<div
+							class="text-[15px] font-normal @md:max-w-3xl w-full py-3 {atSelectedModel
+								? 'mt-2'
+								: ''}"
+						>
 							<MessageInput
 								bind:this={messageInput}
 								{history}
@@ -191,18 +140,18 @@
 								bind:selectedToolIds
 								bind:selectedSkillIds
 								bind:selectedFilterIds
-						bind:imageGenerationEnabled
-						bind:codeInterpreterEnabled
-						bind:webSearchEnabled
-						bind:deepWebSearchEnabled
-						bind:atSelectedModel
+								bind:imageGenerationEnabled
+								bind:codeInterpreterEnabled
+								bind:webSearchEnabled
+								bind:deepWebSearchEnabled
+								bind:atSelectedModel
 								bind:showCommands
 								bind:dragged
 								{pendingOAuthTools}
 								{toolServers}
 								{stopResponse}
 								{createMessagePair}
-								placeholder={$i18n.t('How can I help you today?')}
+								placeholder={$i18n.t('Ask anything')}
 								{onChange}
 								{onUpload}
 								on:submit={(e) => {

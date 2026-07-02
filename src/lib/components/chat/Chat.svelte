@@ -1537,24 +1537,13 @@
 			}
 		}
 
-		if ($page.url.searchParams.get('call') === 'true') {
-			showCallOverlay.set(true);
-			showControls.set(true);
-		}
-
 		// Consume one-shot desktop event (e.g. Spotlight query, call shortcut)
 		if ($desktopEvent) {
 			const event = $desktopEvent;
 			desktopEvent.set(null);
 
 			if (event.type === 'call') {
-				// Defer to next macrotask so the call overlay isn't clobbered by
-				// showControlsSubscribe's initial callback (value=false → set(false))
-				// which runs as a pending microtask after this function.
-				setTimeout(() => {
-					showCallOverlay.set(true);
-					showControls.set(true);
-				}, 0);
+				showCallOverlay.set(false);
 			} else if (event.type === 'query') {
 				const query = event.data?.query;
 				const eventFiles = event.data?.files;
@@ -3255,7 +3244,7 @@
 				/>
 
 				<div
-					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-950 dark:to-gray-950/95 z-0"
+					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-black dark:to-black z-0"
 				/>
 			{:else if $settings?.backgroundImageUrl ?? $config?.license_metadata?.background_image_url ?? null}
 				<div
@@ -3265,7 +3254,7 @@
 				/>
 
 				<div
-					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-950 dark:to-gray-950/95 z-0"
+					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-black dark:to-black z-0"
 				/>
 			{/if}
 
@@ -3333,7 +3322,7 @@
 						}}
 					/>
 
-					<div id="chat-pane" class="flex flex-col flex-auto z-10 w-full @container overflow-auto">
+					<div id="chat-pane" class="flex flex-col flex-auto min-h-0 z-10 w-full @container overflow-hidden">
 						{#if ($settings?.landingPageMode === 'chat' && !$selectedFolder) || createMessagesList(history, history.currentId).length > 0}
 							<div
 								class=" pb-0.5 flex flex-col justify-between w-full flex-auto overflow-auto h-0 max-w-full z-10 scrollbar-hidden"
@@ -3373,7 +3362,7 @@
 								</div>
 							</div>
 
-							<div class="pb-7 sm:pb-8 {dragged ? 'z-0' : 'z-10'}">
+								<div class="chat-input-shell shrink-0 pb-3 sm:pb-3 {dragged ? 'z-0' : 'z-20'}">
 								<MessageInput
 									bind:this={messageInput}
 									{history}
@@ -3451,6 +3440,8 @@
 									}}
 								/>
 
+								<div class="chat-input-bottom-surface" aria-hidden="true"></div>
+
 								<div
 									class="absolute bottom-1 text-xs text-gray-500 text-center line-clamp-1 right-0 left-0"
 								>
@@ -3509,7 +3500,6 @@
 					bind:files
 					bind:pane={controlPane}
 					chatId={$chatId}
-					modelId={selectedModelIds?.at(0) ?? null}
 					models={selectedModelIds.reduce((a, e, i, arr) => {
 						const model = $models.find((m) => m.id === e);
 						if (model) {
@@ -3517,10 +3507,7 @@
 						}
 						return a;
 					}, [])}
-					submitPrompt={submitHandler}
-					{stopResponse}
 					{showMessage}
-					{eventTarget}
 					{codeInterpreterEnabled}
 				/>
 			</PaneGroup>

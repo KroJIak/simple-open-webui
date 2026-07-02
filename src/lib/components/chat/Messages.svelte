@@ -24,7 +24,7 @@
 
 	const i18n = getContext('i18n');
 
-	export let className = 'h-full flex pt-12';
+export let className = 'h-full flex pt-7';
 
 	export let chatId = '';
 	export let user = $_user;
@@ -547,7 +547,7 @@
 
 <style>
 	.chat-content-scale {
-		--chat-content-scale: 1.1;
+		--chat-content-scale: 1;
 		transform-origin: top center;
 	}
 

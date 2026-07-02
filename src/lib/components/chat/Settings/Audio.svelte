@@ -7,7 +7,6 @@
 
 	import Switch from '$lib/components/common/Switch.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
-	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	const dispatch = createEventDispatcher();
 
 	const i18n = getContext('i18n');
@@ -15,13 +14,8 @@
 	export let saveSettings: Function;
 
 	// Audio
-	let conversationMode = false;
-	let speechAutoSend = false;
 	let responseAutoPlayback = false;
 	let nonLocalVoices = false;
-
-	let STTEngine = '';
-	let STTLanguage = '';
 
 	let TTSEngine = '';
 	let TTSEngineConfig = {};
@@ -84,20 +78,10 @@
 		saveSettings({ responseAutoPlayback: responseAutoPlayback });
 	};
 
-	const toggleSpeechAutoSend = async () => {
-		speechAutoSend = !speechAutoSend;
-		saveSettings({ speechAutoSend: speechAutoSend });
-	};
-
 	onMount(async () => {
 		browserTTSOnly = $config.audio.tts.engine === '';
 		playbackRate = $settings.audio?.tts?.playbackRate ?? 1;
-		conversationMode = $settings.conversationMode ?? false;
-		speechAutoSend = $settings.speechAutoSend ?? false;
 		responseAutoPlayback = $settings.responseAutoPlayback ?? false;
-
-		STTEngine = $settings?.audio?.stt?.engine ?? '';
-		STTLanguage = $settings?.audio?.stt?.language ?? '';
 
 		TTSEngine = browserTTSOnly ? '' : ($settings?.audio?.tts?.engine ?? '');
 		TTSEngineConfig = browserTTSOnly ? {} : ($settings?.audio?.tts?.engineConfig ?? {});
@@ -166,10 +150,6 @@
 	on:submit|preventDefault={async () => {
 		saveSettings({
 			audio: {
-				stt: {
-					engine: STTEngine !== '' ? STTEngine : undefined,
-					language: STTLanguage !== '' ? STTLanguage : undefined
-				},
 				tts: {
 					engine: browserTTSOnly ? undefined : TTSEngine !== '' ? TTSEngine : undefined,
 					engineConfig: browserTTSOnly ? undefined : TTSEngineConfig,
@@ -184,70 +164,6 @@
 	}}
 >
 	<div class=" space-y-3 overflow-y-scroll max-h-[28rem] md:max-h-full">
-		<div>
-			<div class=" mb-1 text-sm font-medium">{$i18n.t('STT Settings')}</div>
-
-			{#if $config.audio.stt.engine !== 'web'}
-				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs font-medium">{$i18n.t('Speech-to-Text Engine')}</div>
-					<div class="flex items-center relative">
-						<select
-							class="w-fit pr-8 rounded-sm px-2 p-1 text-xs bg-transparent outline-hidden text-right"
-							bind:value={STTEngine}
-							aria-label={$i18n.t('Speech-to-Text Engine')}
-							placeholder={$i18n.t('Select an engine')}
-						>
-							<option value="">{$i18n.t('Default')}</option>
-							<option value="web">{$i18n.t('Web API')}</option>
-						</select>
-					</div>
-				</div>
-
-				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs font-medium">{$i18n.t('Language')}</div>
-
-					<div class="flex items-center relative text-xs px-3">
-						<Tooltip
-							content={$i18n.t(
-								'The language of the input audio. Supplying the input language in ISO-639-1 (e.g. en) format will improve accuracy and latency. Leave blank to automatically detect the language.'
-							)}
-							placement="top"
-						>
-							<input
-								type="text"
-								bind:value={STTLanguage}
-								aria-label={$i18n.t('Speech-to-Text Language')}
-								placeholder={$i18n.t('e.g. en')}
-								class=" text-sm text-right bg-transparent dark:text-gray-300 outline-hidden"
-							/>
-						</Tooltip>
-					</div>
-				</div>
-			{/if}
-
-			<div class=" py-0.5 flex w-full justify-between">
-				<div class=" self-center text-xs font-medium">
-					{$i18n.t('Instant Auto-Send After Voice Transcription')}
-				</div>
-
-				<button
-					class="p-1 px-3 text-xs flex rounded-sm transition"
-					on:click={() => {
-						toggleSpeechAutoSend();
-					}}
-					type="button"
-					role="switch"
-					aria-checked={speechAutoSend}
-				>
-					{#if speechAutoSend === true}
-						<span class="ml-2 self-center">{$i18n.t('On')}</span>
-					{:else}
-						<span class="ml-2 self-center">{$i18n.t('Off')}</span>
-					{/if}
-				</button>
-			</div>
-		</div>
-
 		<div>
 			<div class=" mb-1 text-sm font-medium">{$i18n.t('TTS Settings')}</div>
 

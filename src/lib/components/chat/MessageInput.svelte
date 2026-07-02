@@ -63,7 +63,6 @@
 	import { getSuggestionRenderer } from '../common/RichTextInput/suggestions';
 
 	import InputMenu from './MessageInput/InputMenu.svelte';
-	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 
 	import ToolServersModal from './ToolServersModal.svelte';
 	import SkillsModal from './SkillsModal.svelte';
@@ -431,7 +430,6 @@
 	let showSkills = false;
 
 	let loaded = false;
-	let recording = false;
 
 	let isComposing = false;
 	// Safari has a bug where compositionend is not triggered correctly #16615
@@ -485,7 +483,9 @@
 		const lineHeight = Number.parseFloat(style.lineHeight);
 
 		return Number.isFinite(lineHeight)
-			? lineHeight + Number.parseFloat(style.paddingTop || '0') + Number.parseFloat(style.paddingBottom || '0')
+			? lineHeight +
+					Number.parseFloat(style.paddingTop || '0') +
+					Number.parseFloat(style.paddingBottom || '0')
 			: 24;
 	};
 
@@ -534,7 +534,9 @@
 			return false;
 		}
 
-		const longestLineLength = prompt.split('\n').reduce((max, line) => Math.max(max, line.length), 0);
+		const longestLineLength = prompt
+			.split('\n')
+			.reduce((max, line) => Math.max(max, line.length), 0);
 		if (longestLineLength >= COMPACT_INPUT_MAX_LINE_LENGTH) {
 			compactInputWrapLockLength = longestLineLength;
 			return false;
@@ -551,7 +553,8 @@
 		const availableTextWidth = layoutWidth - leftWidth - rightWidth - 24;
 		const promptTextWidth = getPromptTextWidth();
 		const editorElement = getChatInputEditorElement();
-		const editorHeight = editorElement?.scrollHeight ?? editorElement?.getBoundingClientRect().height ?? 0;
+		const editorHeight =
+			editorElement?.scrollHeight ?? editorElement?.getBoundingClientRect().height ?? 0;
 		const singleLineHeight = getSingleLineInputHeight();
 
 		if (compactInputLayout && editorHeight > singleLineHeight + 8) {
@@ -603,8 +606,6 @@
 	let filesInputElement;
 	let commandsElement;
 
-	let inputFiles;
-
 	let showInputModal = false;
 
 	export let dragged = false;
@@ -648,8 +649,7 @@
 		return Number.isFinite(number) ? `${Number.parseFloat(String(number))}x` : '';
 	};
 
-	const ceilToSingleDecimal = (value: number) =>
-		Math.ceil((value + Number.EPSILON) * 10) / 10;
+	const ceilToSingleDecimal = (value: number) => Math.ceil((value + Number.EPSILON) * 10) / 10;
 
 	const getModelMeta = (model: Model | undefined) =>
 		((model as any)?.info?.meta ?? (model as any)?.meta ?? {}) as Record<string, any>;
@@ -754,7 +754,9 @@
 
 	$: selectedReasoningEffort =
 		typeof params?.reasoning_effort === 'string' &&
-		REASONING_EFFORT_LEVELS.includes(params.reasoning_effort as (typeof REASONING_EFFORT_LEVELS)[number])
+		REASONING_EFFORT_LEVELS.includes(
+			params.reasoning_effort as (typeof REASONING_EFFORT_LEVELS)[number]
+		)
 			? params.reasoning_effort
 			: null;
 
@@ -1166,19 +1168,6 @@
 			shiftKey = true;
 		}
 
-		// Cmd/Ctrl+Shift+L to toggle dictation
-		if (e.key.toLowerCase() === 'l' && (e.metaKey || e.ctrlKey) && e.shiftKey) {
-			e.preventDefault();
-			if (recording) {
-				// Confirm and stop recording
-				document.getElementById('confirm-recording-button')?.click();
-			} else {
-				// Start recording (same logic as voice-input-button click)
-				document.getElementById('voice-input-button')?.click();
-			}
-			return;
-		}
-
 		if (e.key === 'Escape') {
 			console.log('Escape');
 			dragged = false;
@@ -1442,11 +1431,9 @@
 />
 
 {#if loaded}
-		<div class="w-full font-primary">
-			<div class=" mx-auto inset-x-0 bg-transparent flex justify-center">
-			<div
-				class="flex flex-col px-1 max-w-[48rem] w-full"
-			>
+	<div class="w-full font-primary">
+		<div class="chat-input-column mx-auto inset-x-0 bg-transparent flex justify-center">
+			<div class="chat-input-inner flex flex-col">
 				<div class="relative">
 					{#if autoScroll === false && history?.currentId}
 						<div
@@ -1479,19 +1466,17 @@
 		</div>
 
 		<div class="bg-transparent">
-			<div
-				class="max-w-[48rem] px-0.5 mx-auto inset-x-0"
-			>
-				<div class="">
+			<div class="chat-input-column mx-auto inset-x-0">
+				<div class="chat-input-inner">
 					<input
 						bind:this={filesInputElement}
-						bind:files={inputFiles}
 						type="file"
 						hidden
 						multiple
 						on:change={async () => {
-							if (inputFiles && inputFiles.length > 0) {
-								const _inputFiles = Array.from(inputFiles);
+							const selectedInputFiles = filesInputElement?.files;
+							if (selectedInputFiles && selectedInputFiles.length > 0) {
+								const _inputFiles = Array.from(selectedInputFiles);
 								inputFilesHandler(_inputFiles);
 							} else {
 								toast.error($i18n.t(`File not found.`));
@@ -1501,45 +1486,20 @@
 						}}
 					/>
 
-					<div class={recording ? '' : 'hidden'}>
-						<VoiceRecording
-							bind:recording
-							onCancel={async () => {
-								recording = false;
-
-								await tick();
-								document.getElementById('chat-input')?.focus();
-							}}
-							onConfirm={async (data) => {
-								const { text, filename } = data;
-
-								recording = false;
-
-								await tick();
-								await insertTextAtCursor(`${text}`);
-								await tick();
-								document.getElementById('chat-input')?.focus();
-
-								if ($settings?.speechAutoSend ?? false) {
-									dispatch('submit', prompt);
-								}
-							}}
-						/>
-					</div>
 					<form
-						class="w-full flex flex-col gap-1.5 {recording ? 'hidden' : ''}"
+						class="w-full flex flex-col gap-1.5"
 						on:submit|preventDefault={() => {
 							// check if selectedModels support image input
 							dispatch('submit', prompt);
 						}}
-						>
-							<button
-								id="generate-message-pair-button"
-								class="hidden"
-								type="button"
-								aria-label="Generate message pair"
-								on:click={() => createMessagePair(prompt)}
-							></button>
+					>
+						<button
+							id="generate-message-pair-button"
+							class="hidden"
+							type="button"
+							aria-label="Generate message pair"
+							on:click={() => createMessagePair(prompt)}
+						></button>
 
 						<!-- Task list display -->
 						{#if isActive && chatTasks.length > 0}
@@ -1551,7 +1511,7 @@
 						<!-- Queued messages display -->
 						{#if messageQueue.length > 0}
 							<div
-								class="mb-1 mx-2 py-0.5 px-1.5 rounded-2xl bg-white dark:bg-gray-900/60 border border-gray-100 dark:border-gray-800/50 overflow-x-hidden overflow-y-auto max-h-[25vh]"
+								class="mb-1 mx-2 py-0.5 px-1.5 rounded-2xl bg-white dark:bg-black border border-gray-100 dark:border-white/12 overflow-x-hidden overflow-y-auto max-h-[25vh]"
 							>
 								{#each messageQueue as queuedMessage (queuedMessage.id)}
 									<QueuedMessageItem
@@ -1568,15 +1528,15 @@
 
 						<div
 							id="message-input-container"
-							class="flex-1 flex flex-col relative w-full shadow-lg rounded-[2rem] border {$temporaryChatEnabled
-								? 'border-dashed border-gray-100 dark:border-gray-800 hover:border-gray-200 focus-within:border-gray-200 hover:dark:border-gray-700 focus-within:dark:border-gray-700'
-								: ' border-gray-100/30 dark:border-gray-850/30 hover:border-gray-200 focus-within:border-gray-100 hover:dark:border-gray-800 focus-within:dark:border-gray-800'}  transition px-1 bg-white/5 dark:bg-[#2a2a2a] backdrop-blur-sm dark:text-gray-100"
+							class="chat-input-panel flex-1 flex flex-col relative w-full shadow-lg rounded-[2rem] border {$temporaryChatEnabled
+								? 'border-dashed border-gray-100 dark:border-white/14 hover:border-gray-200 focus-within:border-gray-200 hover:dark:border-white/20 focus-within:dark:border-white/20'
+								: ' border-gray-100/30 dark:border-white/12 hover:border-gray-200 focus-within:border-gray-100 hover:dark:border-white/18 focus-within:dark:border-white/18'}  transition px-1 backdrop-blur-sm dark:text-white"
 							dir={$settings?.chatDirection ?? 'auto'}
 						>
 							{#if atSelectedModel !== undefined}
 								<div class="px-3 pt-3 text-left w-full flex flex-col z-10">
 									<div class="flex items-center justify-between w-full">
-										<div class="pl-[1px] flex items-center gap-2 text-sm dark:text-gray-500">
+										<div class="pl-[1px] flex items-center gap-2 text-sm dark:text-white">
 											<img
 												alt="model profile"
 												class="size-3.5 max-w-[28px] object-cover rounded-full"
@@ -1588,7 +1548,7 @@
 										</div>
 										<div>
 											<button
-												class="flex items-center dark:text-gray-500"
+												class="flex items-center dark:text-white"
 												on:click={() => {
 													atSelectedModel = undefined;
 												}}
@@ -1700,101 +1660,63 @@
 								class="relative min-w-0 w-full {compactInputLayout
 									? 'px-2 py-1 min-h-[2.75rem] flex items-center gap-1'
 									: hasInputContent
-									? 'px-2.5 pt-2 pb-2 min-h-[6.25rem] flex flex-col'
-									: 'px-2.5 pt-1.5 pb-1.5 min-h-[3.75rem] flex flex-col'}"
+										? 'px-2.5 pt-2 pb-2 min-h-[6.25rem] flex flex-col'
+										: 'px-2.5 pt-1.5 pb-1.5 min-h-[3.75rem] flex flex-col'}"
 							>
 								<div
-									class="{compactInputLayout
+									class={compactInputLayout
 										? 'z-10 flex shrink-0 items-center'
-										: 'absolute bottom-1.5 left-2.5 z-10 flex shrink-0 items-end'}"
+										: 'absolute bottom-1.5 left-2.5 z-10 flex shrink-0 items-end'}
+								>
+									<div
+										bind:this={inputControlsLeftElement}
+										class="flex items-end gap-0.5 min-w-0 max-w-[14rem] overflow-x-auto scrollbar-hidden"
 									>
-										<div
-											bind:this={inputControlsLeftElement}
-											class="flex items-end gap-0.5 min-w-0 max-w-[14rem] overflow-x-auto scrollbar-hidden"
-										>
-									<InputMenu
-										bind:files
-										selectedModels={atSelectedModel ? [atSelectedModel.id] : selectedModels}
-										{fileUploadCapableModels}
-										{screenCaptureHandler}
-										{inputFilesHandler}
-										uploadFilesHandler={() => {
-											filesInputElement.click();
-										}}
-										uploadGoogleDriveHandler={async () => {
-											try {
-												const fileData = await createPicker();
-												if (fileData) {
-													const file = new File([fileData.blob], fileData.name, {
-														type: fileData.blob.type
-													});
-													await uploadFileHandler(file);
-												} else {
-													console.log('No file was selected from Google Drive');
-												}
-											} catch (error) {
-												console.error('Google Drive Error:', error);
-												toast.error(
-													$i18n.t('Error accessing Google Drive: {{error}}', {
-														error: error.message
-													})
-												);
-											}
-										}}
-										uploadOneDriveHandler={async (authorityType) => {
-											try {
-												const fileData = await pickAndDownloadFile(authorityType);
-												if (fileData) {
-													const file = new File([fileData.blob], fileData.name, {
-														type: fileData.blob.type || 'application/octet-stream'
-													});
-													await uploadFileHandler(file);
-												} else {
-													console.log('No file was selected from OneDrive');
-												}
-											} catch (error) {
-												console.error('OneDrive Error:', error);
-											}
-										}}
-										{onUpload}
-										onClose={async () => {
-											await tick();
-
-											const chatInput = document.getElementById('chat-input');
-											chatInput?.focus();
-										}}
-									>
-										<button
-											type="button"
-											id="input-menu-button"
-											class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
-											aria-label={$i18n.t('More')}
-										>
-											<PlusAlt className="size-5.5" />
-										</button>
-									</InputMenu>
-
-									{#if showWebSearchButton || showImageGenerationButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
-										<IntegrationsMenu
+										<InputMenu
+											bind:files
 											selectedModels={atSelectedModel ? [atSelectedModel.id] : selectedModels}
-											{toggleFilters}
-											{showWebSearchButton}
-											{showImageGenerationButton}
-											{codexCliWebSearchMode}
-											bind:selectedToolIds
-											bind:selectedSkillIds
-											bind:selectedFilterIds
-											bind:webSearchEnabled
-											bind:deepWebSearchEnabled
-											bind:imageGenerationEnabled
-											closeOnOutsideClick={integrationsMenuCloseOnOutsideClick}
-											onShowValves={(e) => {
-												const { type, id } = e;
-												selectedValvesType = type;
-												selectedValvesItemId = id;
-												showValvesModal = true;
-												integrationsMenuCloseOnOutsideClick = false;
+											{fileUploadCapableModels}
+											{screenCaptureHandler}
+											{inputFilesHandler}
+											uploadFilesHandler={() => {
+												filesInputElement.click();
 											}}
+											uploadGoogleDriveHandler={async () => {
+												try {
+													const fileData = await createPicker();
+													if (fileData) {
+														const file = new File([fileData.blob], fileData.name, {
+															type: fileData.blob.type
+														});
+														await uploadFileHandler(file);
+													} else {
+														console.log('No file was selected from Google Drive');
+													}
+												} catch (error) {
+													console.error('Google Drive Error:', error);
+													toast.error(
+														$i18n.t('Error accessing Google Drive: {{error}}', {
+															error: error.message
+														})
+													);
+												}
+											}}
+											uploadOneDriveHandler={async (authorityType) => {
+												try {
+													const fileData = await pickAndDownloadFile(authorityType);
+													if (fileData) {
+														const file = new File([fileData.blob], fileData.name, {
+															type: fileData.blob.type || 'application/octet-stream'
+														});
+														await uploadFileHandler(file);
+													} else {
+														console.log('No file was selected from OneDrive');
+													}
+												} catch (error) {
+													console.error('OneDrive Error:', error);
+												}
+											}}
+											{onUpload}
 											onClose={async () => {
 												await tick();
 
@@ -1804,140 +1726,178 @@
 										>
 											<button
 												type="button"
-												id="integration-menu-button"
-												class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
-												aria-label={$i18n.t('Integrations')}
+												id="input-menu-button"
+												class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-white/10 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
+												aria-label={$i18n.t('More')}
 											>
-												<Component className="size-4.5" strokeWidth="1.5" />
+												<PlusAlt className="size-5.5" />
 											</button>
-										</IntegrationsMenu>
-									{/if}
+										</InputMenu>
 
-									{#if selectedModelIds.length === 1 && $models.find((m) => m.id === selectedModelIds[0])?.has_user_valves}
-										<div class="ml-1 flex gap-1.5">
-											<Tooltip content={$i18n.t('Valves')} placement="top">
-												<button
-													type="button"
-													id="model-valves-button"
-													class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
-													on:click={() => {
-														selectedValvesType = 'function';
-														selectedValvesItemId = selectedModelIds[0]?.split('.')[0];
-														showValvesModal = true;
-													}}
-												>
-													<Knobs className="size-4" strokeWidth="1.5" />
-												</button>
-											</Tooltip>
-										</div>
-									{/if}
+										{#if showWebSearchButton || showImageGenerationButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
+											<IntegrationsMenu
+												selectedModels={atSelectedModel ? [atSelectedModel.id] : selectedModels}
+												{toggleFilters}
+												{showWebSearchButton}
+												{showImageGenerationButton}
+												{codexCliWebSearchMode}
+												bind:selectedToolIds
+												bind:selectedSkillIds
+												bind:selectedFilterIds
+												bind:webSearchEnabled
+												bind:deepWebSearchEnabled
+												bind:imageGenerationEnabled
+												closeOnOutsideClick={integrationsMenuCloseOnOutsideClick}
+												onShowValves={(e) => {
+													const { type, id } = e;
+													selectedValvesType = type;
+													selectedValvesItemId = id;
+													showValvesModal = true;
+													integrationsMenuCloseOnOutsideClick = false;
+												}}
+												onClose={async () => {
+													await tick();
 
-									<div class="ml-0 flex items-center gap-0.5">
-										{#if (selectedToolIds ?? []).length > 0}
-											<Tooltip
-												content={$i18n.t('{{COUNT}} Available Tools', {
-													COUNT: (selectedToolIds ?? []).length
-												})}
+													const chatInput = document.getElementById('chat-input');
+													chatInput?.focus();
+												}}
 											>
 												<button
-													class="translate-y-[0.5px] px-1 flex gap-1 items-center text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg self-center transition"
-													aria-label="Available Tools"
 													type="button"
-													on:click={() => {
-														showTools = !showTools;
-													}}
+													id="integration-menu-button"
+													class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-white/10 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
+													aria-label={$i18n.t('Integrations')}
 												>
-													<Wrench className="size-4" strokeWidth="1.75" />
-
-													<span class="text-sm">
-														{(selectedToolIds ?? []).length}
-													</span>
+													<Component className="size-4.5" strokeWidth="1.5" />
 												</button>
-											</Tooltip>
+											</IntegrationsMenu>
 										{/if}
 
-										{#if (selectedSkillIds ?? []).length > 0}
-											<Tooltip
-												content={$i18n.t('{{COUNT}} Available Skills', {
-													COUNT: (selectedSkillIds ?? []).length
-												})}
-											>
-												<button
-													class="translate-y-[0.5px] px-1 flex gap-1 items-center text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg self-center transition"
-													aria-label="Available Skills"
-													type="button"
-													on:click={() => {
-														showSkills = !showSkills;
-													}}
-												>
-													<Keyframes className="size-4" strokeWidth="1.75" />
-
-													<span class="text-sm">
-														{(selectedSkillIds ?? []).length}
-													</span>
-												</button>
-											</Tooltip>
-										{/if}
-
-										{#each selectedFilterIds as filterId (filterId)}
-											{@const filter = toggleFilters.find((f) => f.id === filterId)}
-											{#if filter}
-												<Tooltip content={filter?.name} placement="top">
+										{#if selectedModelIds.length === 1 && $models.find((m) => m.id === selectedModelIds[0])?.has_user_valves}
+											<div class="ml-1 flex gap-1.5">
+												<Tooltip content={$i18n.t('Valves')} placement="top">
 													<button
-														on:click|preventDefault={() => {
-															if (
-																filter?.has_user_valves &&
-																($_user?.role === 'admin' ||
-																	($_user?.permissions?.chat?.valves ?? true))
-															) {
-																selectedValvesType = 'function';
-																selectedValvesItemId = filterId;
-																showValvesModal = true;
-															} else {
-																selectedFilterIds = selectedFilterIds.filter(
-																	(id) => id !== filterId
-																);
-															}
-														}}
 														type="button"
-														class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {selectedFilterIds.includes(
-															filterId
-														)
-															? 'text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20'
-															: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '} capitalize"
+														id="model-valves-button"
+														class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-white/10 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
+														on:click={() => {
+															selectedValvesType = 'function';
+															selectedValvesItemId = selectedModelIds[0]?.split('.')[0];
+															showValvesModal = true;
+														}}
 													>
-														{#if filter?.icon}
-															<div class="size-4 items-center flex justify-center">
-																<img
-																	src={filter.icon}
-																	class="size-3.5 {filter.icon.includes('data:image/svg')
-																		? 'dark:invert-[80%]'
-																		: ''}"
-																	style="fill: currentColor;"
-																	alt={filter.name}
-																/>
-															</div>
-														{:else}
-															<Sparkles className="size-4" strokeWidth="1.75" />
-														{/if}
-														<!-- svelte-ignore a11y-click-events-have-key-events -->
-														<!-- svelte-ignore a11y-no-static-element-interactions -->
-														<div
-															class="hidden group-hover:block"
-															on:click={(e) => {
-																e.stopPropagation();
-																e.preventDefault();
-																selectedFilterIds = selectedFilterIds.filter(
-																	(id) => id !== filterId
-																);
-															}}
-														>
-															<XMark className="size-4" strokeWidth="1.75" />
-														</div>
+														<Knobs className="size-4" strokeWidth="1.5" />
+													</button>
+												</Tooltip>
+											</div>
+										{/if}
+
+										<div class="ml-0 flex items-center gap-0.5">
+											{#if (selectedToolIds ?? []).length > 0}
+												<Tooltip
+													content={$i18n.t('{{COUNT}} Available Tools', {
+														COUNT: (selectedToolIds ?? []).length
+													})}
+												>
+													<button
+														class="translate-y-[0.5px] px-1 flex gap-1 items-center text-gray-600 dark:text-white hover:text-gray-700 dark:hover:text-white rounded-lg self-center transition"
+														aria-label="Available Tools"
+														type="button"
+														on:click={() => {
+															showTools = !showTools;
+														}}
+													>
+														<Wrench className="size-4" strokeWidth="1.75" />
+
+														<span class="text-sm">
+															{(selectedToolIds ?? []).length}
+														</span>
 													</button>
 												</Tooltip>
 											{/if}
-										{/each}
+
+											{#if (selectedSkillIds ?? []).length > 0}
+												<Tooltip
+													content={$i18n.t('{{COUNT}} Available Skills', {
+														COUNT: (selectedSkillIds ?? []).length
+													})}
+												>
+													<button
+														class="translate-y-[0.5px] px-1 flex gap-1 items-center text-gray-600 dark:text-white hover:text-gray-700 dark:hover:text-white rounded-lg self-center transition"
+														aria-label="Available Skills"
+														type="button"
+														on:click={() => {
+															showSkills = !showSkills;
+														}}
+													>
+														<Keyframes className="size-4" strokeWidth="1.75" />
+
+														<span class="text-sm">
+															{(selectedSkillIds ?? []).length}
+														</span>
+													</button>
+												</Tooltip>
+											{/if}
+
+											{#each selectedFilterIds as filterId (filterId)}
+												{@const filter = toggleFilters.find((f) => f.id === filterId)}
+												{#if filter}
+													<Tooltip content={filter?.name} placement="top">
+														<button
+															on:click|preventDefault={() => {
+																if (
+																	filter?.has_user_valves &&
+																	($_user?.role === 'admin' ||
+																		($_user?.permissions?.chat?.valves ?? true))
+																) {
+																	selectedValvesType = 'function';
+																	selectedValvesItemId = filterId;
+																	showValvesModal = true;
+																} else {
+																	selectedFilterIds = selectedFilterIds.filter(
+																		(id) => id !== filterId
+																	);
+																}
+															}}
+															type="button"
+															class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {selectedFilterIds.includes(
+																filterId
+															)
+																? 'text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20'
+																: 'bg-transparent text-gray-600 dark:text-white hover:bg-gray-50 dark:hover:bg-white/10 '} capitalize"
+														>
+															{#if filter?.icon}
+																<div class="size-4 items-center flex justify-center">
+																	<img
+																		src={filter.icon}
+																		class="size-3.5 {filter.icon.includes('data:image/svg')
+																			? 'dark:invert-[80%]'
+																			: ''}"
+																		style="fill: currentColor;"
+																		alt={filter.name}
+																	/>
+																</div>
+															{:else}
+																<Sparkles className="size-4" strokeWidth="1.75" />
+															{/if}
+															<!-- svelte-ignore a11y-click-events-have-key-events -->
+															<!-- svelte-ignore a11y-no-static-element-interactions -->
+															<div
+																class="hidden group-hover:block"
+																on:click={(e) => {
+																	e.stopPropagation();
+																	e.preventDefault();
+																	selectedFilterIds = selectedFilterIds.filter(
+																		(id) => id !== filterId
+																	);
+																}}
+															>
+																<XMark className="size-4" strokeWidth="1.75" />
+															</div>
+														</button>
+													</Tooltip>
+												{/if}
+											{/each}
 
 											{#if webSearchEnabled && !codexCliWebSearchMode}
 												<Tooltip content={$i18n.t('Web Search')} placement="top">
@@ -1949,75 +1909,74 @@
 															}
 														}}
 														type="button"
-													class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {webSearchEnabled ||
-													($settings?.webSearch ?? false) === 'always'
-														? ' text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20'
-														: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '}"
-												>
-													<GlobeAlt className="size-4" strokeWidth="1.75" />
-													<div class="hidden group-hover:block">
-														<XMark className="size-4" strokeWidth="1.75" />
-													</div>
-												</button>
-											</Tooltip>
-										{/if}
+														class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {webSearchEnabled ||
+														($settings?.webSearch ?? false) === 'always'
+															? ' text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20'
+															: 'bg-transparent text-gray-600 dark:text-white hover:bg-gray-50 dark:hover:bg-white/10 '}"
+													>
+														<GlobeAlt className="size-4" strokeWidth="1.75" />
+														<div class="hidden group-hover:block">
+															<XMark className="size-4" strokeWidth="1.75" />
+														</div>
+													</button>
+												</Tooltip>
+											{/if}
 
-										{#if imageGenerationEnabled}
-											<Tooltip content={$i18n.t('Image')} placement="top">
-												<button
-													on:click|preventDefault={() =>
-														(imageGenerationEnabled = !imageGenerationEnabled)}
-													type="button"
-													class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {imageGenerationEnabled
-														? ' text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-700/10 border border-sky-200/40 dark:border-sky-500/20'
-														: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '}"
-												>
-													<Photo className="size-4" strokeWidth="1.75" />
-													<div class="hidden group-hover:block">
-														<XMark className="size-4" strokeWidth="1.75" />
-													</div>
-												</button>
-											</Tooltip>
-										{/if}
+											{#if imageGenerationEnabled}
+												<Tooltip content={$i18n.t('Image')} placement="top">
+													<button
+														on:click|preventDefault={() =>
+															(imageGenerationEnabled = !imageGenerationEnabled)}
+														type="button"
+														class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {imageGenerationEnabled
+															? ' text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-700/10 border border-sky-200/40 dark:border-sky-500/20'
+															: 'bg-transparent text-gray-600 dark:text-white hover:bg-gray-50 dark:hover:bg-white/10 '}"
+													>
+														<Photo className="size-4" strokeWidth="1.75" />
+														<div class="hidden group-hover:block">
+															<XMark className="size-4" strokeWidth="1.75" />
+														</div>
+													</button>
+												</Tooltip>
+											{/if}
 
-										{#each pendingOAuthTools as pendingTool (pendingTool.id)}
-											<Tooltip content={$i18n.t('Click to connect')} placement="top">
-												<button
-													on:click|preventDefault={() => {
-														sessionStorage.setItem('pendingOAuthToolId', pendingTool.id);
-														const authUrl = getOAuthClientAuthorizationUrl(
-															pendingTool.serverId,
-															pendingTool.authType ?? 'mcp'
-														);
-														window.open(authUrl, '_self', 'noopener');
-													}}
-													type="button"
-													class="group px-2 py-[5px] flex gap-1.5 items-center text-xs rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden
+											{#each pendingOAuthTools as pendingTool (pendingTool.id)}
+												<Tooltip content={$i18n.t('Click to connect')} placement="top">
+													<button
+														on:click|preventDefault={() => {
+															sessionStorage.setItem('pendingOAuthToolId', pendingTool.id);
+															const authUrl = getOAuthClientAuthorizationUrl(
+																pendingTool.serverId,
+																pendingTool.authType ?? 'mcp'
+															);
+															window.open(authUrl, '_self', 'noopener');
+														}}
+														type="button"
+														class="group px-2 py-[5px] flex gap-1.5 items-center text-xs rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden
 														text-amber-600 dark:text-amber-400 bg-amber-50 hover:bg-amber-100 dark:bg-amber-400/10 dark:hover:bg-amber-600/10 border border-amber-200/40 dark:border-amber-500/20"
-												>
-													<Wrench className="size-3.5" strokeWidth="1.75" />
-													<span class="truncate">{pendingTool.name}</span>
-												</button>
-											</Tooltip>
-										{/each}
+													>
+														<Wrench className="size-3.5" strokeWidth="1.75" />
+														<span class="truncate">{pendingTool.name}</span>
+													</button>
+												</Tooltip>
+											{/each}
 										</div>
 									</div>
 								</div>
 
-									<div
-										class="{compactInputLayout
+								<div
+									class={compactInputLayout
 										? 'min-w-0 flex-1'
-										: 'flex min-w-0 w-full flex-1 flex-col justify-between gap-1'}"
+										: 'flex min-w-0 w-full flex-1 flex-col justify-between gap-1'}
 									dir="ltr"
 								>
 									<div
 										bind:this={chatInputContainerElement}
-										class="scrollbar-hidden rtl:text-right ltr:text-left bg-transparent dark:text-gray-100 outline-hidden w-full min-w-0 flex px-0.5 resize-none h-fit max-h-96 overflow-auto {compactInputLayout
+										class="scrollbar-hidden rtl:text-right ltr:text-left bg-transparent dark:text-white outline-hidden w-full min-w-0 flex px-0.5 resize-none h-fit max-h-96 overflow-auto {compactInputLayout
 											? 'items-center min-h-0 pt-0 pb-0'
 											: hasInputContent
-											? 'min-h-[3.5rem] pt-0.5 pb-0.5'
-											: 'min-h-0 pt-0 pb-0'} {files.length ===
-										0
+												? 'min-h-[3.5rem] pt-0.5 pb-0.5'
+												: 'min-h-0 pt-0 pb-0'} {files.length === 0
 											? atSelectedModel !== undefined
 												? 'pt-0'
 												: 'pt-0.5'
@@ -2029,7 +1988,7 @@
 												<div class="mt-2.5 mr-3">
 													<button
 														type="button"
-														class="p-1 rounded-lg hover:bg-gray-100/50 dark:hover:bg-gray-800/50"
+														class="p-1 rounded-lg hover:bg-gray-100/50 dark:hover:bg-white/10"
 														aria-label="Expand input"
 														on:click={async () => {
 															showInputModal = true;
@@ -2066,7 +2025,7 @@
 																navigator.maxTouchPoints > 0 ||
 																navigator.msMaxTouchPoints > 0
 															)}
-														placeholder={placeholder ? placeholder : $i18n.t('Send a Message')}
+														placeholder={placeholder ? placeholder : $i18n.t('Ask anything')}
 														largeTextAsFile={($settings?.largeTextAsFile ?? true) && !shiftKey}
 														className="input-prose min-h-fit h-full text-[15px]"
 														autocomplete={$config?.features?.enable_autocomplete_generation &&
@@ -2209,193 +2168,83 @@
 									</div>
 								</div>
 
+								<div
+									class={compactInputLayout
+										? 'z-10 flex min-w-fit shrink-0 justify-end'
+										: 'flex justify-end min-w-0 w-full'}
+								>
 									<div
-										class="{compactInputLayout
-											? 'z-10 flex min-w-fit shrink-0 justify-end'
-											: 'flex justify-end min-w-0 w-full'}"
+										bind:this={inputControlsRightElement}
+										class="flex items-center shrink-0 gap-0.5"
 									>
-								<div bind:this={inputControlsRightElement} class="flex items-center shrink-0 gap-0.5">
-									{#if codexCliModels.length > 0 && codexCliModels.length === currentModels.length}
-										<Dropdown align="end" sideOffset={4}>
-											<Tooltip content={$i18n.t('Reasoning Effort')} placement="top">
-												<button
-													type="button"
-													id="reasoning-effort-menu-button"
-													class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full h-8 pl-3 pr-2 flex items-center gap-1.5 outline-hidden focus:outline-hidden text-[15px] font-medium"
-													aria-label={$i18n.t('Reasoning Effort')}
-												>
-													<span>{selectedReasoningEffort ?? 'medium'}</span>
-													<ChevronDown className="size-3.5 text-gray-500 dark:text-gray-400" />
-												</button>
-											</Tooltip>
+										{#if codexCliModels.length > 0 && codexCliModels.length === currentModels.length}
+											<Dropdown align="end" sideOffset={4}>
+												<Tooltip content={$i18n.t('Reasoning Effort')} placement="top">
+													<button
+														type="button"
+														id="reasoning-effort-menu-button"
+														class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-white/10 rounded-full h-8 pl-3 pr-2 flex items-center gap-1.5 outline-hidden focus:outline-hidden text-[15px] font-medium"
+														aria-label={$i18n.t('Reasoning Effort')}
+													>
+														<span>{selectedReasoningEffort ?? 'medium'}</span>
+														<ChevronDown className="size-3.5 text-gray-500 dark:text-white" />
+													</button>
+												</Tooltip>
 
-											<div slot="content">
-												<div
-													class="min-w-[160px] rounded-2xl p-1 z-[9999999] bg-white dark:bg-gray-850 dark:text-white shadow-lg border border-gray-100 dark:border-gray-800"
-												>
-													{#each REASONING_EFFORT_LEVELS as level}
-														{@const allowed = isReasoningEffortAllowed(level, currentModels)}
-														<Tooltip
-															content={allowed
-																? ''
-																: getReasoningEffortDisabledTooltip(level, currentModels)}
-															placement="top"
-														>
-															<button
-																type="button"
-																aria-disabled={!allowed}
-																class="select-none flex rounded-xl py-1.5 px-3 w-full transition items-center gap-2 text-[15px] {allowed
-																	? 'hover:bg-gray-50 dark:hover:bg-gray-800'
-																	: 'opacity-45 cursor-not-allowed'}"
-																on:click={() => {
-																	setReasoningEffort(level);
-																}}
+												<div slot="content">
+													<div
+														class="min-w-[160px] rounded-2xl p-1 z-[9999999] bg-white dark:bg-black dark:text-white shadow-lg border border-gray-100 dark:border-white/12"
+													>
+														{#each REASONING_EFFORT_LEVELS as level}
+															{@const allowed = isReasoningEffortAllowed(level, currentModels)}
+															<Tooltip
+																content={allowed
+																	? ''
+																	: getReasoningEffortDisabledTooltip(level, currentModels)}
+																placement="top"
 															>
-																<span class="flex-1 text-left"
-																	>{getReasoningEffortLabel(level, currentModels)}</span
+																<button
+																	type="button"
+																	aria-disabled={!allowed}
+																	class="select-none flex rounded-xl py-1.5 px-3 w-full transition items-center gap-2 text-[15px] {allowed
+																		? 'hover:bg-gray-50 dark:hover:bg-white/10'
+																		: 'opacity-45 cursor-not-allowed'}"
+																	on:click={() => {
+																		setReasoningEffort(level);
+																	}}
 																>
-																{#if activeReasoningEffort === level}
-																	<Check className="size-3.5 text-gray-500 dark:text-gray-400" />
-																{/if}
-															</button>
-														</Tooltip>
-													{/each}
+																	<span class="flex-1 text-left"
+																		>{getReasoningEffortLabel(level, currentModels)}</span
+																	>
+																	{#if activeReasoningEffort === level}
+																		<Check className="size-3.5 text-gray-500 dark:text-white" />
+																	{/if}
+																</button>
+															</Tooltip>
+														{/each}
+													</div>
 												</div>
-											</div>
-										</Dropdown>
-									{/if}
-
-									{#if isActive && prompt === '' && files.length === 0}
-										<div class=" flex items-center">
-											<Tooltip content={$i18n.t('Stop')}>
-												<button
-													class="bg-white hover:bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-800 transition rounded-full p-1.5"
-													on:click={() => {
-														stopResponse();
-													}}
-												>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														viewBox="0 0 24 24"
-														fill="currentColor"
-														class="size-5"
-													>
-														<path
-															fill-rule="evenodd"
-															d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm6-2.438c0-.724.588-1.312 1.313-1.312h4.874c.725 0 1.313.588 1.313 1.313v4.874c0 .725-.588 1.313-1.313 1.313H9.564a1.312 1.312 0 01-1.313-1.313V9.564z"
-															clip-rule="evenodd"
-														/>
-													</svg>
-												</button>
-											</Tooltip>
-										</div>
-									{:else}
-										{#if prompt !== '' && !history?.currentId && !$selectedTerminalId && ($config?.features?.enable_notes ?? false) && ($_user?.role === 'admin' || ($_user?.permissions?.features?.notes ?? true))}
-											<!-- {$i18n.t('Create Note')}  -->
-											<Tooltip content={$i18n.t('Create note')} className=" flex items-center">
-												<button
-													id="create-note-button"
-													class=" text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full p-1.5 -mr-1 self-center"
-													type="button"
-													disabled={prompt === '' && files.length === 0}
-													on:click={() => {
-														createNote();
-													}}
-												>
-													<Note className="size-4.5 translate-y-[0.5px]" />
-												</button>
-											</Tooltip>
+											</Dropdown>
 										{/if}
 
-										{#if !history?.currentId || history.messages[history.currentId]?.done == true}
-											<!-- Terminal Server Selector -->
-											{@const hasDirectToolServerAccess =
-												$_user?.role === 'admin' ||
-												($_user?.permissions?.features?.direct_tool_servers ?? true)}
-											{#if terminalCapableModels.length > 0 && (($terminalServers ?? []).some((t) => t.id) || (hasDirectToolServerAccess && (($terminalServers ?? []).some((t) => !t.id) || ($settings?.terminalServers ?? []).some((s) => s.url))))}
-												<TerminalMenu bind:show={showTerminalMenu} />
-											{/if}
-
-											{#if $_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true)}
-												<!-- {$i18n.t('Record voice')} -->
-												<Tooltip content={$i18n.t('Dictate')}>
-													<button
-														id="voice-input-button"
-													class=" text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full p-1.5 self-center"
-														type="button"
-														on:click={() => {
-															recording = true;
-														}}
-														aria-label="Voice Input"
-													>
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															viewBox="0 0 20 20"
-															fill="currentColor"
-															class="size-5 translate-y-[0.5px]"
-														>
-															<path d="M7 4a3 3 0 016 0v6a3 3 0 11-6 0V4z" />
-															<path
-																d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10a4.5 4.5 0 01-9 0v-.357z"
-															/>
-														</svg>
-													</button>
-												</Tooltip>
-											{:else if codexCliWebSearchMode && !webSearchEnabled}
-												<Tooltip content={$i18n.t('Do not search the internet')} placement="top">
-													<button
-														on:click|preventDefault={() => {
-															webSearchEnabled = true;
-															deepWebSearchEnabled = false;
-														}}
-														type="button"
-														class="group px-2 py-[5px] flex gap-1.5 items-center text-xs rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden text-amber-600 dark:text-amber-400 bg-amber-50 hover:bg-amber-100 dark:bg-amber-400/10 dark:hover:bg-amber-600/10 border border-amber-200/40 dark:border-amber-500/20"
-													>
-														<LinkSlash className="size-3.5" strokeWidth="1.75" />
-														<span class="truncate">{$i18n.t('No Internet')}</span>
-														<div class="hidden group-hover:block">
-															<XMark className="size-4" strokeWidth="1.75" />
-														</div>
-													</button>
-												</Tooltip>
-											{/if}
-
-											{#if webSearchEnabled && deepWebSearchEnabled && !codexCliWebSearchMode}
-												<Tooltip content={$i18n.t('Deep Web Search')} placement="top">
-													<button
-														on:click|preventDefault={() =>
-															(deepWebSearchEnabled = !deepWebSearchEnabled)}
-														type="button"
-														class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20"
-													>
-														<Sparkles className="size-4" strokeWidth="1.75" />
-														<div class="hidden group-hover:block">
-															<XMark className="size-4" strokeWidth="1.75" />
-														</div>
-													</button>
-												</Tooltip>
-											{/if}
-										{/if}
-
-										{#if prompt === '' && files.length === 0}
+										{#if isActive && prompt === '' && files.length === 0}
 											<div class=" flex items-center">
-												<Tooltip content={$i18n.t('Send message')}>
+												<Tooltip content={$i18n.t('Stop')}>
 													<button
-														id="send-message-button"
-														class="text-white bg-gray-200 dark:text-gray-900 dark:bg-gray-700 disabled transition rounded-full p-1.5 self-center"
-														type="submit"
-														disabled={true}
-														aria-label={$i18n.t('Send message')}
+														class="bg-white hover:bg-gray-100 text-gray-800 dark:bg-black dark:text-white dark:hover:bg-white/10 transition rounded-full p-1.5"
+														on:click={() => {
+															stopResponse();
+														}}
 													>
 														<svg
 															xmlns="http://www.w3.org/2000/svg"
-															viewBox="0 0 16 16"
+															viewBox="0 0 24 24"
 															fill="currentColor"
 															class="size-5"
 														>
 															<path
 																fill-rule="evenodd"
-																d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z"
+																d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm6-2.438c0-.724.588-1.312 1.313-1.312h4.874c.725 0 1.313.588 1.313 1.313v4.874c0 .725-.588 1.313-1.313 1.313H9.564a1.312 1.312 0 01-1.313-1.313V9.564z"
 																clip-rule="evenodd"
 															/>
 														</svg>
@@ -2403,23 +2252,78 @@
 												</Tooltip>
 											</div>
 										{:else}
-											<div class=" flex items-center">
-												<Tooltip
-													content={uploadPending
-														? $i18n.t('Waiting for upload...')
-														: $i18n.t('Send message')}
-												>
+											{#if prompt !== '' && !history?.currentId && !$selectedTerminalId && ($config?.features?.enable_notes ?? false) && ($_user?.role === 'admin' || ($_user?.permissions?.features?.notes ?? true))}
+												<!-- {$i18n.t('Create Note')}  -->
+												<Tooltip content={$i18n.t('Create note')} className=" flex items-center">
 													<button
-														id="send-message-button"
-														class="{!(prompt === '' && files.length === 0) || uploadPending
-															? 'bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 '
-															: 'text-white bg-gray-200 dark:text-gray-900 dark:bg-gray-700 disabled'} transition rounded-full p-1.5 self-center"
-														type="submit"
-														disabled={(prompt === '' && files.length === 0) || uploadPending}
+														id="create-note-button"
+														class=" text-gray-500 dark:text-white hover:text-gray-700 dark:hover:text-white transition rounded-full p-1.5 -mr-1 self-center"
+														type="button"
+														disabled={prompt === '' && files.length === 0}
+														on:click={() => {
+															createNote();
+														}}
 													>
-														{#if uploadPending}
-															<Spinner className="size-5" />
-														{:else}
+														<Note className="size-4.5 translate-y-[0.5px]" />
+													</button>
+												</Tooltip>
+											{/if}
+
+											{#if !history?.currentId || history.messages[history.currentId]?.done == true}
+												<!-- Terminal Server Selector -->
+												{@const hasDirectToolServerAccess =
+													$_user?.role === 'admin' ||
+													($_user?.permissions?.features?.direct_tool_servers ?? true)}
+												{#if terminalCapableModels.length > 0 && (($terminalServers ?? []).some((t) => t.id) || (hasDirectToolServerAccess && (($terminalServers ?? []).some((t) => !t.id) || ($settings?.terminalServers ?? []).some((s) => s.url))))}
+													<TerminalMenu bind:show={showTerminalMenu} />
+												{/if}
+
+												{#if codexCliWebSearchMode && !webSearchEnabled}
+													<Tooltip content={$i18n.t('Do not search the internet')} placement="top">
+														<button
+															on:click|preventDefault={() => {
+																webSearchEnabled = true;
+																deepWebSearchEnabled = false;
+															}}
+															type="button"
+															class="group px-2 py-[5px] flex gap-1.5 items-center text-xs rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden text-amber-600 dark:text-amber-400 bg-amber-50 hover:bg-amber-100 dark:bg-amber-400/10 dark:hover:bg-amber-600/10 border border-amber-200/40 dark:border-amber-500/20"
+														>
+															<LinkSlash className="size-3.5" strokeWidth="1.75" />
+															<span class="truncate">{$i18n.t('No Internet')}</span>
+															<div class="hidden group-hover:block">
+																<XMark className="size-4" strokeWidth="1.75" />
+															</div>
+														</button>
+													</Tooltip>
+												{/if}
+
+												{#if webSearchEnabled && deepWebSearchEnabled && !codexCliWebSearchMode}
+													<Tooltip content={$i18n.t('Deep Web Search')} placement="top">
+														<button
+															on:click|preventDefault={() =>
+																(deepWebSearchEnabled = !deepWebSearchEnabled)}
+															type="button"
+															class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20"
+														>
+															<Sparkles className="size-4" strokeWidth="1.75" />
+															<div class="hidden group-hover:block">
+																<XMark className="size-4" strokeWidth="1.75" />
+															</div>
+														</button>
+													</Tooltip>
+												{/if}
+											{/if}
+
+											{#if prompt === '' && files.length === 0}
+												<div class=" flex items-center">
+													<Tooltip content={$i18n.t('Send message')}>
+														<button
+															id="send-message-button"
+															class="text-white bg-gray-200 dark:text-black dark:bg-white disabled transition rounded-full p-1.5 self-center"
+															type="submit"
+															disabled={true}
+															aria-label={$i18n.t('Send message')}
+														>
 															<svg
 																xmlns="http://www.w3.org/2000/svg"
 																viewBox="0 0 16 16"
@@ -2432,23 +2336,57 @@
 																	clip-rule="evenodd"
 																/>
 															</svg>
-														{/if}
-													</button>
-												</Tooltip>
-											</div>
+														</button>
+													</Tooltip>
+												</div>
+											{:else}
+												<div class=" flex items-center">
+													<Tooltip
+														content={uploadPending
+															? $i18n.t('Waiting for upload...')
+															: $i18n.t('Send message')}
+													>
+														<button
+															id="send-message-button"
+															class="{!(prompt === '' && files.length === 0) || uploadPending
+																? 'bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 '
+																: 'text-white bg-gray-200 dark:text-black dark:bg-white disabled'} transition rounded-full p-1.5 self-center"
+															type="submit"
+															disabled={(prompt === '' && files.length === 0) || uploadPending}
+														>
+															{#if uploadPending}
+																<Spinner className="size-5" />
+															{:else}
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	viewBox="0 0 16 16"
+																	fill="currentColor"
+																	class="size-5"
+																>
+																	<path
+																		fill-rule="evenodd"
+																		d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z"
+																		clip-rule="evenodd"
+																	/>
+																</svg>
+															{/if}
+														</button>
+													</Tooltip>
+												</div>
+											{/if}
 										{/if}
-									{/if}
-										</div>
-											</div>
-										</div>
+									</div>
+								</div>
+							</div>
 
 							{#if $config?.license_metadata?.input_footer}
-								<div class=" text-xs text-gray-500 text-center line-clamp-1 marked">
+								<div class=" text-xs text-gray-500 dark:text-white text-center line-clamp-1 marked">
 									{@html DOMPurify.sanitize(marked($config?.license_metadata?.input_footer))}
 								</div>
 							{:else}
 								<div class="h-0"></div>
 							{/if}
+						</div>
 					</form>
 				</div>
 			</div>

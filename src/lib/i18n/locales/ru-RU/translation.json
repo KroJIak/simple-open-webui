@@ -198,6 +198,7 @@
 	"Archived Chats": "Архив чатов",
 	"archived-chat-export": "экспорт-архивного-чата",
 	"Are you sure you want to archive all chats? This action cannot be undone.": "Вы уверены, что хотите архивировать все чаты? Это действие нельзя отменить.",
+	"Ask anything": "Спросите что угодно",
 	"Are you sure you want to clear all memories? This action cannot be undone.": "Вы уверены, что хотите удалить все воспоминания? Это действие нельзя отменить.",
 	"Are you sure you want to delete \"{{NAME}}\"?": "Вы уверены, что хотите удалить \"{{NAME}}\"?",
 	"Are you sure you want to delete **{{modelName}}**?": "Вы уверены, что хотите удалить **{{modelName}}**?",

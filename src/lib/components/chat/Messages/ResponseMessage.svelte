@@ -257,9 +257,6 @@
 
 					speech.onend = () => {
 						speaking = false;
-						if ($settings.conversationMode) {
-							document.getElementById('voice-input-button')?.click();
-						}
 					};
 
 					if (voice) {
@@ -666,9 +663,9 @@
 	>
 		<div class="flex-auto w-0 relative">
 			<div>
-				<div class="chat-{message.role} w-full min-w-full markdown-prose-sm">
+				<div class="chat-{message.role} assistant-message-shell">
 					<div>
-						{#if model?.info?.meta?.capabilities?.status_updates ?? true}
+						{#if (model?.info?.meta?.capabilities?.status_updates ?? true) && !message.done}
 							<StatusHistory statusHistory={message?.statusHistory} />
 						{/if}
 
@@ -721,7 +718,7 @@
 						{/if}
 
 						{#if edit === true}
-							<div class="w-full bg-gray-50 dark:bg-gray-800 rounded-3xl px-3 py-3 my-2">
+							<div class="w-full bg-gray-50 dark:bg-black rounded-3xl px-3 py-3 my-2">
 								{#if editedOutput}
 									<!-- Structured output editor (visual + JSON toggle) -->
 									<OutputEditView
@@ -765,7 +762,7 @@
 									<div>
 										<button
 											id="save-new-message-button"
-											class="px-3.5 py-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-200 transition rounded-3xl"
+											class="px-3.5 py-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-black dark:hover:bg-white/10 border border-gray-100 dark:border-white/12 text-gray-700 dark:text-white transition rounded-3xl"
 											on:click={() => {
 												saveAsCopyHandler();
 											}}
@@ -777,7 +774,7 @@
 									<div class="flex space-x-1.5">
 										<button
 											id="close-edit-message-button"
-											class="px-3.5 py-1.5 bg-white dark:bg-gray-900 hover:bg-gray-100 text-gray-800 dark:text-gray-100 transition rounded-3xl"
+											class="px-3.5 py-1.5 bg-white dark:bg-black hover:bg-gray-100 dark:hover:bg-white/10 text-gray-800 dark:text-white transition rounded-3xl"
 											on:click={() => {
 												cancelEditMessage();
 											}}
@@ -809,42 +806,44 @@
 							{:else if message.content && message.error !== true}
 								<!-- always show message contents even if there's an error -->
 								<!-- unless message.error === true which is legacy error handling, where the error message is stored in message.content -->
-								<ContentRenderer
-									id={`${chatId}-${message.id}`}
-									content={message.content}
-									sources={message.sources}
-									floatingButtons={message?.done &&
-										!readOnly &&
-										($settings?.showFloatingActionButtons ?? true)}
-									save={!readOnly}
-									preview={!readOnly}
-									{editCodeBlock}
-									{topPadding}
-									done={($settings?.chatFadeStreamingText ?? true)
-										? (message?.done ?? false)
-										: true}
-									{model}
-									onTaskClick={async (e) => {
-										console.log(e);
-									}}
-									onSourceClick={async (id) => {
-										console.log(id);
+								<div class="assistant-message-body">
+									<ContentRenderer
+										id={`${chatId}-${message.id}`}
+										content={message.content}
+										sources={message.sources}
+										floatingButtons={message?.done &&
+											!readOnly &&
+											($settings?.showFloatingActionButtons ?? true)}
+										save={!readOnly}
+										preview={!readOnly}
+										{editCodeBlock}
+										{topPadding}
+										done={($settings?.chatFadeStreamingText ?? true)
+											? (message?.done ?? false)
+											: true}
+										{model}
+										onTaskClick={async (e) => {
+											console.log(e);
+										}}
+										onSourceClick={async (id) => {
+											console.log(id);
 
-										if (citationsElement) {
-											citationsElement?.showSourceModal(id);
-										}
-									}}
-									onSetInputText={(text) => {
-										setInputText(text);
-									}}
-									onSave={({ raw, oldContent, newContent }) => {
-										history.messages[message.id].content = history.messages[
-											message.id
-										].content.replace(raw, raw.replace(oldContent, newContent));
+											if (citationsElement) {
+												citationsElement?.showSourceModal(id);
+											}
+										}}
+										onSetInputText={(text) => {
+											setInputText(text);
+										}}
+										onSave={({ raw, oldContent, newContent }) => {
+											history.messages[message.id].content = history.messages[
+												message.id
+											].content.replace(raw, raw.replace(oldContent, newContent));
 
-										updateChat();
-									}}
-								/>
+											updateChat();
+										}}
+									/>
+								</div>
 							{/if}
 
 							{#if message?.error}
@@ -871,7 +870,7 @@
 				{#if !edit}
 					<div
 						bind:this={buttonsContainerElement}
-						class="flex items-center flex-wrap justify-start overflow-x-auto buttons text-gray-600 dark:text-gray-500 mt-0.5"
+						class="assistant-message-actions flex items-center flex-wrap justify-start overflow-x-auto buttons text-gray-600 dark:text-gray-400 mt-0.5"
 					>
 						{#if message.done || siblings.length > 1}
 							{#if siblings.length > 1}
@@ -902,7 +901,7 @@
 
 									{#if messageIndexEdit}
 										<div
-											class="text-sm flex justify-center font-semibold self-center dark:text-gray-100 min-w-fit"
+											class="text-sm flex justify-center font-semibold self-center dark:text-gray-300 min-w-fit"
 										>
 											<input
 												id="message-index-input-{message.id}"
@@ -923,13 +922,13 @@
 														messageIndexEdit = false;
 													}
 												}}
-												class="bg-transparent font-semibold self-center dark:text-gray-100 min-w-fit outline-hidden"
+												class="bg-transparent font-semibold self-center dark:text-gray-300 min-w-fit outline-hidden"
 											/>/{siblings.length}
 										</div>
 									{:else}
 										<!-- svelte-ignore a11y-no-static-element-interactions -->
 										<div
-											class="text-sm tracking-widest font-semibold self-center dark:text-gray-100 min-w-fit"
+											class="text-sm tracking-widest font-semibold self-center dark:text-gray-300 min-w-fit"
 											on:dblclick={async () => {
 												messageIndexEdit = true;
 
@@ -977,7 +976,8 @@
 										<Tooltip content={$i18n.t('Edit')} placement="bottom">
 											<button
 												aria-label={$i18n.t('Edit')}
-												class="{isLastMessage || ($settings?.highContrastMode ?? false)
+												class="assistant-legacy-control {isLastMessage ||
+												($settings?.highContrastMode ?? false)
 													? 'visible'
 													: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
 												on:click={() => {
@@ -1037,7 +1037,8 @@
 										<button
 											aria-label={$i18n.t('Read Aloud')}
 											id="speak-button-{message.id}"
-											class="{isLastMessage || ($settings?.highContrastMode ?? false)
+											class="assistant-legacy-control {isLastMessage ||
+											($settings?.highContrastMode ?? false)
 												? 'visible'
 												: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
 											on:click={() => {
@@ -1137,7 +1138,8 @@
 									>
 										<button
 											aria-hidden="true"
-											class=" {isLastMessage || ($settings?.highContrastMode ?? false)
+											class="assistant-legacy-control {isLastMessage ||
+											($settings?.highContrastMode ?? false)
 												? 'visible'
 												: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition whitespace-pre-wrap"
 											on:click={() => {
@@ -1174,7 +1176,7 @@
 													: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg {(
 													message?.annotation?.rating ?? ''
 												).toString() === '1'
-													? 'bg-gray-100 dark:bg-gray-800'
+													? 'bg-gray-100 dark:bg-white/10'
 													: ''} dark:hover:text-white hover:text-black transition disabled:cursor-progress disabled:hover:bg-transparent"
 												disabled={feedbackLoading}
 												on:click={async () => {
@@ -1212,7 +1214,7 @@
 													: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg {(
 													message?.annotation?.rating ?? ''
 												).toString() === '-1'
-													? 'bg-gray-100 dark:bg-gray-800'
+													? 'bg-gray-100 dark:bg-white/10'
 													: ''} dark:hover:text-white hover:text-black transition disabled:cursor-progress disabled:hover:bg-transparent"
 												disabled={feedbackLoading}
 												on:click={async () => {
@@ -1249,7 +1251,8 @@
 												aria-label={$i18n.t('Continue Response')}
 												type="button"
 												id="continue-response-button"
-												class="{isLastMessage || ($settings?.highContrastMode ?? false)
+												class="assistant-legacy-control {isLastMessage ||
+												($settings?.highContrastMode ?? false)
 													? 'visible'
 													: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
 												on:click={() => {
@@ -1388,33 +1391,34 @@
 													</svg>
 												</button>
 											</Tooltip>
+										{/if}
 									{/if}
-								{/if}
 
-								{#if message.done}
-									<div
-										class="{isLastMessage || ($settings?.highContrastMode ?? false)
-											? 'flex'
-											: 'hidden group-hover:flex'} ml-1 items-center gap-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap"
-									>
-										<Tooltip content={model?.name ?? message.model} placement="bottom">
-											<span id="response-message-model-name" class="line-clamp-1 max-w-[13rem]">
-												{model?.name ?? message.model}
-											</span>
-										</Tooltip>
-
-										{#if message.timestamp}
-											<Tooltip content={dayjs(message.timestamp * 1000).format('LLLL')}>
-												<span class="first-letter:capitalize">
-													{$i18n.t(formatDate(message.timestamp * 1000), {
-														LOCALIZED_TIME: dayjs(message.timestamp * 1000).format('LT'),
-														LOCALIZED_DATE: dayjs(message.timestamp * 1000).format('L')
-													})}
+									{#if message.done}
+										<div
+											class="assistant-response-meta {isLastMessage ||
+											($settings?.highContrastMode ?? false)
+												? 'flex'
+												: 'hidden group-hover:flex'} ml-1 items-center gap-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap"
+										>
+											<Tooltip content={model?.name ?? message.model} placement="bottom">
+												<span id="response-message-model-name" class="line-clamp-1 max-w-[13rem]">
+													{model?.name ?? message.model}
 												</span>
 											</Tooltip>
-										{/if}
-									</div>
-								{/if}
+
+											{#if message.timestamp}
+												<Tooltip content={dayjs(message.timestamp * 1000).format('LLLL')}>
+													<span class="first-letter:capitalize">
+														{$i18n.t(formatDate(message.timestamp * 1000), {
+															LOCALIZED_TIME: dayjs(message.timestamp * 1000).format('LT'),
+															LOCALIZED_DATE: dayjs(message.timestamp * 1000).format('L')
+														})}
+													</span>
+												</Tooltip>
+											{/if}
+										</div>
+									{/if}
 
 									{#if $user?.role === 'admin' || ($user?.permissions?.chat?.delete_message ?? true)}
 										{#if siblings.length > 1}
@@ -1423,7 +1427,8 @@
 													type="button"
 													aria-label={$i18n.t('Delete')}
 													id="delete-response-button"
-													class="{isLastMessage || ($settings?.highContrastMode ?? false)
+													class="assistant-legacy-control {isLastMessage ||
+													($settings?.highContrastMode ?? false)
 														? 'visible'
 														: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
 													on:click={(e) => {

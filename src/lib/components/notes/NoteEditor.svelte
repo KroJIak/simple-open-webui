@@ -72,8 +72,6 @@
 
 	import RichTextInput from '../common/RichTextInput.svelte';
 	import Spinner from '../common/Spinner.svelte';
-	import MicSolid from '../icons/MicSolid.svelte';
-	import VoiceRecording from '../chat/MessageInput/VoiceRecording.svelte';
 	import DeleteConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 
 	import LockClosed from '../icons/LockClosed.svelte';
@@ -81,7 +79,6 @@
 	import Image from '../common/Image.svelte';
 	import FileItem from '../common/FileItem.svelte';
 	import FilesOverlay from '../chat/MessageInput/FilesOverlay.svelte';
-	import RecordMenu from './RecordMenu.svelte';
 	import NoteMenu from './Notes/NoteMenu.svelte';
 	import EllipsisHorizontal from '../icons/EllipsisHorizontal.svelte';
 	import Sparkles from '../icons/Sparkles.svelte';
@@ -128,9 +125,6 @@
 
 	let versionIdx = null;
 	let selectedModelId = null;
-
-	let recording = false;
-	let displayMediaRecord = false;
 
 	let showPanel = false;
 
@@ -1077,90 +1071,6 @@ ${content}
 					</div>
 				</div>
 			{/if}
-		</div>
-		<div class="absolute z-50 bottom-0 right-0 p-3.5 flex select-none">
-			<div class="flex flex-col gap-2 justify-end">
-				{#if recording}
-					<div class="flex-1 w-full">
-						<VoiceRecording
-							bind:recording
-							className="p-1 w-full max-w-full"
-							transcribe={false}
-							displayMedia={displayMediaRecord}
-							echoCancellation={false}
-							noiseSuppression={false}
-							onCancel={() => {
-								recording = false;
-								displayMediaRecord = false;
-							}}
-							onConfirm={(data) => {
-								if (data?.file) {
-									uploadFileHandler(data?.file);
-								}
-
-								recording = false;
-								displayMediaRecord = false;
-							}}
-						/>
-					</div>
-				{:else}
-					<RecordMenu
-						onRecord={async () => {
-							displayMediaRecord = false;
-
-							try {
-								let stream = await navigator.mediaDevices
-									.getUserMedia({ audio: true })
-									.catch(function (err) {
-										toast.error(
-											$i18n.t(`Permission denied when accessing microphone: {{error}}`, {
-												error: err
-											})
-										);
-										return null;
-									});
-
-								if (stream) {
-									recording = true;
-									const tracks = stream.getTracks();
-									tracks.forEach((track) => track.stop());
-								}
-								stream = null;
-							} catch {
-								toast.error($i18n.t('Permission denied when accessing microphone'));
-							}
-						}}
-						onCaptureAudio={async () => {
-							displayMediaRecord = true;
-
-							recording = true;
-						}}
-						onUpload={async () => {
-							const input = document.createElement('input');
-							input.type = 'file';
-							input.accept = 'audio/*';
-							input.multiple = false;
-							input.click();
-
-							input.onchange = async (e) => {
-								const files = e.target.files;
-
-								if (files && files.length > 0) {
-									await uploadFileHandler(files[0]);
-								}
-							};
-						}}
-					>
-						<Tooltip content={$i18n.t('Record')} placement="top">
-							<div
-								class="cursor-pointer p-2.5 flex rounded-full border border-gray-50 bg-white dark:border-none dark:bg-gray-850 hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-xl"
-							>
-								<MicSolid className="size-4.5" />
-							</div>
-						</Tooltip>
-					</RecordMenu>
-				{/if}
-			</div>
 		</div>
 	</Pane>
 	<NotePanel bind:show={showPanel}>

@@ -49,20 +49,22 @@
 			<LinkPreview.Trigger>
 				<button
 					aria-label={`${getDisplayTitle(formattedTitle(decodeString(sourceIds[token.ids[0] - 1])))} +${(token?.ids ?? []).length - 1} more sources`}
-					class="text-[10px] w-fit translate-y-[2px] px-2 py-0.5 dark:bg-white/5 dark:text-white/80 dark:hover:text-white bg-gray-50 text-black/80 hover:text-black transition rounded-xl"
+					class="assistant-inline-source-group w-fit"
 					on:click={() => {
 						openPreview = !openPreview;
 					}}
 				>
 					<span class="line-clamp-1">
 						{getDisplayTitle(formattedTitle(decodeString(sourceIds[token.ids[0] - 1])))}
-						<span class="dark:text-white/50 text-black/50">+{(token?.ids ?? []).length - 1}</span>
+						<span class="text-white/50">+{(token?.ids ?? []).length - 1}</span>
 					</span>
 				</button>
 			</LinkPreview.Trigger>
 			<LinkPreview.Portal>
 				<LinkPreview.Content class="z-[999]" align="start" strategy="fixed" sideOffset={6}>
-					<div class="bg-gray-50 dark:bg-gray-850 rounded-xl p-1 cursor-pointer">
+					<div
+						class="rounded-2xl border border-white/12 bg-black/95 p-1.5 shadow-[0_18px_48px_rgba(0,0,0,0.45)] cursor-pointer"
+					>
 						{#each token.citationIdentifiers ?? token.ids as identifier}
 							{@const id =
 								typeof identifier === 'string' ? parseInt(identifier.split('#')[0]) : identifier}

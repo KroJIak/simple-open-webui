@@ -32,7 +32,6 @@
 	import InputMenu from './MessageInput/InputMenu.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 	import RichTextInput from '../common/RichTextInput.svelte';
-	import VoiceRecording from '../chat/MessageInput/VoiceRecording.svelte';
 	import FileItem from '../common/FileItem.svelte';
 	import Image from '../common/Image.svelte';
 	import FilesOverlay from '../chat/MessageInput/FilesOverlay.svelte';
@@ -71,7 +70,6 @@
 	let loaded = false;
 	let draggedOver = false;
 
-	let recording = false;
 	let content = '';
 	let files = [];
 
@@ -767,33 +765,6 @@
 			<div
 				class="{disabled ? 'opacity-50 pointer-events-none cursor-not-allowed' : ''} relative z-20"
 			>
-				{#if recording}
-					<VoiceRecording
-						bind:recording
-						onCancel={async () => {
-							recording = false;
-
-							await tick();
-
-							if (chatInputElement) {
-								chatInputElement.focus();
-							}
-						}}
-						onConfirm={async (data) => {
-							const { text, filename } = data;
-							recording = false;
-
-							await tick();
-							insertTextAtCursor(text);
-
-							await tick();
-
-							if (chatInputElement) {
-								chatInputElement.focus();
-							}
-						}}
-					/>
-				{:else}
 					<form
 						class="w-full flex gap-1.5"
 						on:submit|preventDefault={() => {
@@ -1013,32 +984,6 @@
 								</div>
 
 								<div class="self-end flex space-x-1 mr-1">
-									{#if content === ''}
-										<Tooltip content={$i18n.t('Record voice')}>
-											<button
-												id="voice-input-button"
-												class=" text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full p-1.5 mr-0.5 self-center"
-												type="button"
-												on:click={() => {
-													recording = true;
-												}}
-												aria-label="Voice Input"
-											>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													viewBox="0 0 20 20"
-													fill="currentColor"
-													class="w-5 h-5 translate-y-[0.5px]"
-												>
-													<path d="M7 4a3 3 0 016 0v6a3 3 0 11-6 0V4z" />
-													<path
-														d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10a4.5 4.5 0 01-9 0v-.357z"
-													/>
-												</svg>
-											</button>
-										</Tooltip>
-									{/if}
-
 									<div class=" flex items-center">
 										{#if inputLoading && onStop}
 											<div class=" flex items-center">
@@ -1096,7 +1041,6 @@
 							</div>
 						</div>
 					</form>
-				{/if}
 			</div>
 		</div>
 	</div>
