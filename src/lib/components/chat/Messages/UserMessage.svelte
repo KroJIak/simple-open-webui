@@ -52,6 +52,8 @@
 	let editScrollContainer: HTMLDivElement;
 
 	let message = structuredClone(history.messages[messageId]);
+	$: isLargeUserBubble =
+		(message?.content ?? '').includes('\n') || (message?.content ?? '').trim().length > 72;
 	$: if (history.messages) {
 		const source = history.messages[messageId];
 		if (source) {
@@ -358,7 +360,7 @@
 					<div class="flex {($settings?.chatBubble ?? true) ? 'justify-end pb-1' : 'w-full'}">
 						<div
 							class="rounded-3xl {($settings?.chatBubble ?? true)
-								? `user-message-bubble max-w-[90%] px-4 py-2.5 bg-[#2b2b2b] text-white ${
+								? `user-message-bubble ${isLargeUserBubble ? 'user-message-bubble-large' : ''} max-w-[90%] px-4 bg-[#2b2b2b] text-white ${
 										message.files ? 'rounded-tr-lg' : ''
 									}`
 								: ' w-full'}"

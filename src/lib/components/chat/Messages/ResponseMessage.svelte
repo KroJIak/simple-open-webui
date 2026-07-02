@@ -1287,6 +1287,8 @@
 										{#if $settings?.regenerateMenu ?? true}
 											<button
 												type="button"
+												aria-hidden="true"
+												tabindex="-1"
 												class="hidden regenerate-response-button"
 												on:click={() => {
 													showRateComment = false;
@@ -1304,7 +1306,7 @@
 														});
 													});
 												}}
-											/>
+											></button>
 
 											<RegenerateMenu
 												onRegenerate={(prompt = null) => {

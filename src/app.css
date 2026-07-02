@@ -60,10 +60,12 @@
 		'Segoe UI',
 		sans-serif;
 	--app-text-color: #ffffff;
+	--app-secondary-text-color: #b4b4b4;
+	--app-muted-text-color: #8a8a8a;
 	--app-dark-surface: #2b2b2b;
 	--chat-content-column-width: 48rem;
 	--chat-content-column-padding: 0.5rem;
-		--chat-input-bottom-surface-height: 0.9rem;
+	--chat-input-bottom-surface-height: 0.9rem;
 }
 
 html {
@@ -84,6 +86,7 @@ html {
 	/* chat title line height follows the text scale */
 	height: calc(20px * var(--app-text-scale, 1));
 	line-height: calc(20px * var(--app-text-scale, 1));
+	color: var(--app-text-color);
 }
 
 #sidebar-chat-item input {
@@ -207,6 +210,11 @@ textarea::placeholder {
 	background: #2b2b2b;
 	color: var(--app-text-color);
 	font-family: var(--app-sans-font);
+	padding-block: 0.625rem;
+}
+
+.user-message-bubble-large {
+	padding-block: 0.875rem;
 }
 
 .user-message-bubble :where(p, div, span, li, strong, em, blockquote, a) {
@@ -240,8 +248,8 @@ textarea::placeholder {
 		BlinkMacSystemFont,
 		'Segoe UI',
 		sans-serif;
-	font-size: 1rem;
-	line-height: 1.75;
+	font-size: 0.9375rem;
+	line-height: 1.65;
 	letter-spacing: 0;
 	font-weight: 400;
 	color: #ffffff;
@@ -284,19 +292,19 @@ textarea::placeholder {
 }
 
 .assistant-message-body h1 {
-	font-size: 1.8rem;
+	font-size: 1.42rem;
 }
 
 .assistant-message-body h2 {
-	font-size: 1.55rem;
+	font-size: 1.24rem;
 }
 
 .assistant-message-body h3 {
-	font-size: 1.35rem;
+	font-size: 1.06rem;
 }
 
 .assistant-message-body h4 {
-	font-size: 1.15rem;
+	font-size: 1rem;
 }
 
 .assistant-message-body p,
@@ -398,7 +406,7 @@ textarea::placeholder {
 	max-width: none;
 	margin: 1rem auto 0;
 	gap: 0.04rem;
-	color: #ffffff;
+	color: var(--app-secondary-text-color);
 	scrollbar-width: none;
 }
 
@@ -417,7 +425,7 @@ textarea::placeholder {
 }
 
 .assistant-message-actions
-	:is(button, div[aria-label], .copy-response-button, .regenerate-response-button) {
+	:is(button:not(.hidden), div[aria-label], .copy-response-button, .regenerate-response-button:not(.hidden)) {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -434,9 +442,25 @@ textarea::placeholder {
 }
 
 .assistant-message-actions
-	:is(button, div[aria-label], .copy-response-button, .regenerate-response-button):hover {
+	:is(button:not(.hidden), div[aria-label], .copy-response-button, .regenerate-response-button:not(.hidden)):hover {
 	background: rgba(255, 255, 255, 0.08) !important;
 	color: #ffffff;
+}
+
+.assistant-message-actions .hidden.regenerate-response-button {
+	display: none !important;
+}
+
+.assistant-response-meta {
+	color: var(--app-muted-text-color) !important;
+}
+
+.assistant-legacy-control {
+	color: var(--app-secondary-text-color) !important;
+}
+
+.assistant-legacy-control:hover {
+	color: var(--app-text-color) !important;
 }
 
 .assistant-message-actions svg {
@@ -1096,25 +1120,6 @@ textarea,
 select,
 option {
 	font-family: inherit;
-}
-
-.dark :where(
-		[class*='text-gray-'],
-		[class*='dark:text-gray-'],
-		[class*='text-black'],
-		[class*='dark:text-black'],
-		[class*='text-neutral-'],
-		[class*='dark:text-neutral-']
-	) {
-	color: var(--app-text-color) !important;
-}
-
-.dark :where(
-		[class*='dark:bg-white'],
-		[class*='dark:bg-gray-100'],
-		[class*='dark:bg-gray-200']
-	) {
-	background-color: var(--app-dark-surface) !important;
 }
 
 .dark :where(
