@@ -293,6 +293,7 @@
 	"Bypass Embedding and Retrieval": "Обход встраивания и извлечения данных",
 	"Bypass Web Loader": "Обход веб-загрузчика",
 	"Cache Base Model List": "Кэшировать список базовых моделей",
+	"Hide New Models by Default": "Скрывать новые модели по умолчанию",
 	"Calendar": "Календарь",
 	"Calendar created": "Календарь создан",
 	"Calendar deleted": "Календарь удален",

@@ -165,6 +165,7 @@ from open_webui.config import (
     ENABLE_BASE_MODELS_CACHE,
     ENABLE_CALENDAR,
     ENABLE_CHANNELS,
+    HIDE_NEW_MODELS_BY_DEFAULT,
     # Code Execution
     ENABLE_CODE_EXECUTION,
     ENABLE_CODE_INTERPRETER,
@@ -888,6 +889,7 @@ app.state.SCIM_TOKEN = SCIM_TOKEN
 ########################################
 
 app.state.config.ENABLE_BASE_MODELS_CACHE = ENABLE_BASE_MODELS_CACHE
+app.state.config.HIDE_NEW_MODELS_BY_DEFAULT = HIDE_NEW_MODELS_BY_DEFAULT
 app.state.BASE_MODELS = []
 
 ########################################

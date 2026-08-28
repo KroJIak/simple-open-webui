@@ -18,7 +18,7 @@
 
 	let fuse = new Fuse(
 		$models
-			.filter((model) => !model?.info?.meta?.hidden)
+			.filter((model) => !(model?.info?.meta?.hidden ?? model?.meta?.hidden ?? false))
 			.map((model) => {
 				const _item = {
 					...model,
@@ -38,7 +38,7 @@
 		? fuse.search(query).map((e) => {
 				return e.item;
 			})
-		: $models.filter((model) => !model?.info?.meta?.hidden);
+		: $models.filter((model) => !(model?.info?.meta?.hidden ?? model?.meta?.hidden ?? false));
 
 	$: if (query) {
 		selectedIdx = 0;

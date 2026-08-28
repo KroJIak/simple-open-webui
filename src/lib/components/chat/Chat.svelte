@@ -1367,7 +1367,7 @@
 
 	const resolveSelectedModelsForNewChat = async (force = false) => {
 		const availableModels = $models
-			.filter((m) => !(m?.info?.meta?.hidden ?? false))
+			.filter((m) => !(m?.info?.meta?.hidden ?? m?.meta?.hidden ?? false))
 			.map((m) => m.id);
 
 		if (availableModels.length === 0) {

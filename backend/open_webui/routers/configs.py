@@ -71,6 +71,7 @@ async def export_config(user=Depends(get_admin_user)):
 class ConnectionsConfigForm(BaseModel):
     ENABLE_DIRECT_CONNECTIONS: bool
     ENABLE_BASE_MODELS_CACHE: bool
+    HIDE_NEW_MODELS_BY_DEFAULT: bool
 
 
 @router.get('/connections', response_model=ConnectionsConfigForm)
@@ -78,6 +79,7 @@ async def get_connections_config(request: Request, user=Depends(get_admin_user))
     return {
         'ENABLE_DIRECT_CONNECTIONS': request.app.state.config.ENABLE_DIRECT_CONNECTIONS,
         'ENABLE_BASE_MODELS_CACHE': request.app.state.config.ENABLE_BASE_MODELS_CACHE,
+        'HIDE_NEW_MODELS_BY_DEFAULT': request.app.state.config.HIDE_NEW_MODELS_BY_DEFAULT,
     }
 
 
@@ -89,10 +91,12 @@ async def set_connections_config(
 ):
     request.app.state.config.ENABLE_DIRECT_CONNECTIONS = form_data.ENABLE_DIRECT_CONNECTIONS
     request.app.state.config.ENABLE_BASE_MODELS_CACHE = form_data.ENABLE_BASE_MODELS_CACHE
+    request.app.state.config.HIDE_NEW_MODELS_BY_DEFAULT = form_data.HIDE_NEW_MODELS_BY_DEFAULT
 
     return {
         'ENABLE_DIRECT_CONNECTIONS': request.app.state.config.ENABLE_DIRECT_CONNECTIONS,
         'ENABLE_BASE_MODELS_CACHE': request.app.state.config.ENABLE_BASE_MODELS_CACHE,
+        'HIDE_NEW_MODELS_BY_DEFAULT': request.app.state.config.HIDE_NEW_MODELS_BY_DEFAULT,
     }
 
 

@@ -408,6 +408,31 @@
 						)}
 					</div>
 				</div>
+
+				<hr class=" border-gray-100/30 dark:border-gray-850/30 my-2" />
+
+				<div class="my-2">
+					<div class="flex justify-between items-center text-sm">
+						<div class=" text-xs font-medium">{$i18n.t('Hide New Models by Default')}</div>
+
+						<div class="flex items-center">
+							<div class="">
+								<Switch
+									bind:state={connectionsConfig.HIDE_NEW_MODELS_BY_DEFAULT}
+									on:change={async () => {
+										updateConnectionsHandler();
+									}}
+								/>
+							</div>
+						</div>
+					</div>
+
+					<div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+						{$i18n.t(
+							'Models that appear on connections but have no saved configuration yet stay hidden in model selectors until an admin enables them.'
+						)}
+					</div>
+				</div>
 			</div>
 		{:else}
 			<div class="flex h-full justify-center">

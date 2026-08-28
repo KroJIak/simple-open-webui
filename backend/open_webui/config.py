@@ -427,6 +427,12 @@ ENABLE_BASE_MODELS_CACHE = ConfigVar(
     os.getenv('ENABLE_BASE_MODELS_CACHE', 'False').lower() == 'true',
 )
 
+HIDE_NEW_MODELS_BY_DEFAULT = ConfigVar(
+    'HIDE_NEW_MODELS_BY_DEFAULT',
+    'models.hide_new_models',
+    os.getenv('HIDE_NEW_MODELS_BY_DEFAULT', 'False').lower() == 'true',
+)
+
 
 ####################################
 # TOOL_SERVERS

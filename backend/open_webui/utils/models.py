@@ -219,6 +219,15 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
 
             models.append(model)
 
+    # Connection models with no saved configuration are marked hidden so they
+    # only appear in selectors after an admin enables them (Admin Settings ->
+    # Models). Pipe models are added deliberately in the workspace and stay
+    # visible.
+    if request.app.state.config.HIDE_NEW_MODELS_BY_DEFAULT:
+        for model in models:
+            if 'info' not in model and 'pipe' not in model:
+                model['meta'] = {**model.get('meta', {}), 'hidden': True}
+
     # Process action_ids to get the actions
     def get_action_items_from_module(function, module):
         actions = []

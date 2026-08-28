@@ -15,7 +15,7 @@
 
 	const isVisibleModel = (id) => {
 		const model = $models.find((m) => m.id === id);
-		return model && !(model?.info?.meta?.hidden ?? false);
+		return model && !(model?.info?.meta?.hidden ?? model?.meta?.hidden ?? false);
 	};
 
 	const getDefaultPinnedModels = () =>

@@ -107,7 +107,7 @@
 		}
 
 		const visibleItems = (filteredItems.length > 0 ? filteredItems : items).filter(
-			(item) => !(item.model?.info?.meta?.hidden ?? false)
+			(item) => !(item.model?.info?.meta?.hidden ?? item.model?.meta?.hidden ?? false)
 		);
 		const context = getTextMeasureContext();
 		const viewportWidth = window.innerWidth - 16;
@@ -274,7 +274,7 @@
 							return item.model?.direct;
 						}
 					})
-	).filter((item) => !(item.model?.info?.meta?.hidden ?? false));
+	).filter((item) => !(item.model?.info?.meta?.hidden ?? item.model?.meta?.hidden ?? false));
 
 	$: if (
 		selectedTag !== undefined ||

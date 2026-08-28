@@ -4,7 +4,6 @@ services:
     container_name: cliproxyapi
     ports:
       - 127.0.0.1:${CLIPROXYAPI_PORT-18317}:8317
-      - 127.0.0.1:${CLIPROXYAPI_MANAGEMENT_PORT-18085}:8085
     environment:
       - CLIPROXYAPI_API_KEY=${CLIPROXYAPI_API_KEY}
       - CLIPROXYAPI_MANAGEMENT_KEY=${CLIPROXYAPI_MANAGEMENT_KEY}
@@ -31,21 +30,15 @@ services:
         api-keys:
           - "$$api_key"
         remote-management:
-          allow-remote: false
+          allow-remote: true
           secret-key: "$$management_key"
         request-retry: 3
         max-retry-credentials: 1
         max-retry-interval: 30
+        # No "models:" list -> CLIProxyAPI exposes its full built-in Codex catalog
         codex-api-key:
           - api-key: "$$upstream_api_key"
             base-url: "$$upstream_base_url"
-            models:
-              - name: "gpt-5.5"
-                alias: "gpt-5.5"
-              - name: "gpt-5.4"
-                alias: "gpt-5.4"
-              - name: "gpt-5.4-mini"
-                alias: "gpt-5.4-mini"
         EOF
         /CLIProxyAPI/CLIProxyAPI &
         pid=$$!
@@ -60,6 +53,9 @@ services:
     volumes:
       - cliproxyapi-auths:/root/.cli-proxy-api
       - cliproxyapi-logs:/CLIProxyAPI/logs
+    networks:
+      - default
+      - dokploy-network
     restart: unless-stopped
 
   open-webui:
@@ -110,6 +106,7 @@ services:
       - 'WEB_SEARCH_RESULT_COUNT=${WEB_SEARCH_RESULT_COUNT}'
       - 'WEB_SEARCH_CONCURRENT_REQUESTS=${WEB_SEARCH_CONCURRENT_REQUESTS}'
       - 'ENABLE_BASE_MODELS_CACHE=${ENABLE_BASE_MODELS_CACHE}'
+      - 'HIDE_NEW_MODELS_BY_DEFAULT=${HIDE_NEW_MODELS_BY_DEFAULT}'
       - 'AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST=${AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST}'
       - 'AIOHTTP_CLIENT_READ_BUFSIZE=${AIOHTTP_CLIENT_READ_BUFSIZE}'
       - 'AIOHTTP_CLIENT_MAX_LINE_SIZE=${AIOHTTP_CLIENT_MAX_LINE_SIZE}'

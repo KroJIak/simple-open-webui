@@ -94,7 +94,7 @@
 				<option value="" class="bg-gray-50 dark:bg-gray-700" disabled>
 					{$i18n.t('Select a model')}
 				</option>
-				{#each $models.filter((model) => !(model?.info?.meta?.hidden ?? false)) as model}
+				{#each $models.filter((model) => !(model?.info?.meta?.hidden ?? model?.meta?.hidden ?? false)) as model}
 					<option value={model.id} class="bg-gray-50 dark:bg-gray-700">{model.name}</option>
 				{/each}
 			</select>

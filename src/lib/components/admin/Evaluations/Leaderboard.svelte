@@ -48,7 +48,10 @@
 			const statsMap = new Map((result?.entries ?? []).map((e) => [e.model_id, e]));
 
 			rankedModels = $models
-				.filter((m) => m?.owned_by !== 'arena' && !m?.info?.meta?.hidden)
+				.filter(
+					(m) =>
+						m?.owned_by !== 'arena' && !(m?.info?.meta?.hidden ?? m?.meta?.hidden ?? false)
+				)
 				.map((model) => {
 					const s = statsMap.get(model.id);
 					return {

@@ -654,7 +654,11 @@ ${content}
 
 		if (selectedModelId) {
 			const model = $models
-				.filter((model) => model.id === selectedModelId && !(model?.info?.meta?.hidden ?? false))
+				.filter(
+					(model) =>
+						model.id === selectedModelId &&
+						!(model?.info?.meta?.hidden ?? model?.meta?.hidden ?? false)
+				)
 				.find((model) => model.id === selectedModelId);
 
 			if (!model) {
@@ -664,7 +668,8 @@ ${content}
 
 		if (!selectedModelId) {
 			selectedModelId =
-				$models.filter((model) => !(model?.info?.meta?.hidden ?? false)).at(0)?.id || '';
+				$models.filter((model) => !(model?.info?.meta?.hidden ?? model?.meta?.hidden ?? false)).at(0)?.id ||
+				'';
 		}
 
 		const dropzoneElement = document.getElementById('note-editor');
