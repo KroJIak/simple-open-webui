@@ -310,3 +310,13 @@ dist
 cypress/videos
 cypress/screenshots
 .vscode/settings.json
+
+# AI
+.codex
+.agents/
+.ai/
+.grok/
+AGENTS.md
+CLAUDE.md
+.mcp.json
+.claude/
