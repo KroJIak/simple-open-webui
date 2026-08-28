@@ -54,6 +54,11 @@ services:
       - cliproxyapi-auths:/root/.cli-proxy-api
       - cliproxyapi-logs:/CLIProxyAPI/logs
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   open-webui:
     build:
@@ -123,6 +128,11 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   cliproxyapi-auths:
