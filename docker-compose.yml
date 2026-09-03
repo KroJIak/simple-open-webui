@@ -39,6 +39,9 @@ services:
         codex-api-key:
           - api-key: "$$upstream_api_key"
             base-url: "$$upstream_base_url"
+            # Single credential: a cooldown would block ALL models for minutes
+            # after one upstream flap.
+            disable-cooling: true
         EOF
         /CLIProxyAPI/CLIProxyAPI &
         pid=$$!

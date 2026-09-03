@@ -139,6 +139,9 @@ def desired_compat_section(cfg, entries):
                 'name': cfg['provider_name'],
                 'base-url': cfg['upstream_base'].rstrip('/'),
                 'api-key-entries': [{'api-key': cfg['upstream_key']}],
+                # Single credential: a cooldown would block ALL models for
+                # minutes after one upstream flap.
+                'disable-cooling': True,
                 'models': [item['model'] for item in entries],
             }
         ]
@@ -158,7 +161,11 @@ def section_signature(section, provider_name):
             )
             for model in entry.get('models') or []
         )
-        return entry.get('base-url'), models
+        return (
+            entry.get('base-url'),
+            bool(entry.get('disable-cooling')),
+            models,
+        )
     return None
 
 
