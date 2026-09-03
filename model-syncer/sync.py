@@ -26,6 +26,19 @@ import urllib.request
 GPT_FAMILY_RE = re.compile(r'^(gpt-|codex-)')
 EXCLUDED_LEVELS = {'none'}
 REQUEST_TIMEOUT = int(os.getenv('SYNC_HTTP_TIMEOUT', '30'))
+# Capability flags Open WebUI reads from model meta; vision is per-model and
+# the rest mirror the instance defaults (all enabled).
+DEFAULT_CAPABILITIES = {
+    'citations': True,
+    'file_upload': True,
+    'file_context': True,
+    'builtin_tools': True,
+    'status_updates': True,
+    'code_interpreter': True,
+    'web_search': True,
+    'terminal': True,
+    'image_generation': False,
+}
 
 
 def log(msg):
@@ -127,6 +140,7 @@ def build_model_entries(upstream_ids, catalog):
                 'model': model_entry,
                 'levels': levels,
                 'display_name': display_name or model_id,
+                'vision': 'image' in input_modalities,
             }
         )
     return entries
@@ -268,6 +282,9 @@ def sync_openwebui(cfg, entries):
         meta = {}
         if item['levels']:
             meta['reasoning_effort_settings'] = {'available': item['levels']}
+        # Gate the vision capability by the model's real input modalities so
+        # users only get the attachment flow on models that accept images.
+        meta['capabilities'] = dict(DEFAULT_CAPABILITIES, vision=bool(item.get('vision')))
         try:
             http_json(
                 cfg['owui_base'].rstrip('/') + '/api/v1/models/create',
