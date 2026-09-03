@@ -192,50 +192,76 @@ def sync_proxy(cfg, section):
     raise RuntimeError(f'proxy update failed: {last_error}')
 
 
+def load_state(path):
+    try:
+        with open(path) as f:
+            return set(json.load(f))
+    except (OSError, json.JSONDecodeError):
+        return set()
+
+
+def save_state(path, state):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        json.dump(sorted(state), f)
+
+
 def sync_openwebui(cfg, entries):
     if not cfg['owui_key']:
         log('open-webui: OPENWEBUI_API_KEY not set, skipping seeding')
         return
     headers = {'Authorization': f'Bearer {cfg["owui_key"]}'}
-    existing_payload = http_json(
-        cfg['owui_base'].rstrip('/') + '/api/v1/models', headers=headers
-    )
-    existing_rows = (
-        existing_payload.get('data', [])
-        if isinstance(existing_payload, dict)
-        else existing_payload
-    )
-    existing_ids = {row.get('id') for row in existing_rows if isinstance(row, dict)}
+    state = load_state(cfg['state_path'])
 
-    created = 0
+    created, failed = 0, 0
     for item in entries:
         model_id = item['model']['alias']
-        if model_id in existing_ids:
+        if model_id in state:
             continue
         meta = {'hidden': True}
         if item['levels']:
             meta['reasoning_effort_settings'] = {'available': item['levels']}
-        http_json(
-            cfg['owui_base'].rstrip('/') + '/api/v1/models/create',
-            method='POST',
-            body={
-                'id': model_id,
-                'name': item['display_name'],
-                'base_model_id': None,
-                'meta': meta,
-                'params': {},
-                'access_grants': [],
-                'is_active': True,
-            },
-            headers=headers,
-        )
+        try:
+            http_json(
+                cfg['owui_base'].rstrip('/') + '/api/v1/models/create',
+                method='POST',
+                body={
+                    'id': model_id,
+                    'name': item['display_name'],
+                    'base_model_id': None,
+                    'meta': meta,
+                    'params': {},
+                    'access_grants': [],
+                    'is_active': True,
+                },
+                headers=headers,
+            )
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode(errors='replace').lower()
+            # Duplicate id: the API answers 401 with MODEL_ID_TAKEN ("already
+            # registered") — the row exists, keep it untouched.
+            if 'already registered' in body or 'already exist' in body:
+                state.add(model_id)
+                continue
+            failed += 1
+            log(f'open-webui: failed to seed "{model_id}": HTTP {exc.code}')
+            continue
+        except (urllib.error.URLError, OSError) as exc:
+            failed += 1
+            log(f'open-webui: failed to seed "{model_id}": {exc}')
+            continue
+        state.add(model_id)
         created += 1
         log(
             f'open-webui: seeded "{model_id}" ({item["display_name"]}) hidden, '
             f'levels={item["levels"] or "none"}'
         )
-    if created == 0:
+
+    save_state(cfg['state_path'], state)
+    if created == 0 and failed == 0:
         log('open-webui: nothing new to seed')
+    else:
+        log(f'open-webui: seeded {created}, skipped existing, failed {failed}')
 
 
 def run_cycle(cfg):
@@ -260,6 +286,7 @@ def load_config():
         'provider_name': env('SYNC_PROVIDER_NAME', 'cheapvibecode'),
         'owui_base': env('OPENWEBUI_BASE_URL', 'http://open-webui:8080'),
         'owui_key': env('OPENWEBUI_API_KEY'),
+        'state_path': env('SYNC_STATE_PATH', '/app/data/seeded.json'),
         'interval': int(env('SYNC_INTERVAL_SECONDS', '900')),
         'once': env('SYNC_ONCE', '0') == '1',
     }

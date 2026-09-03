@@ -75,6 +75,8 @@ services:
       - OPENWEBUI_BASE_URL=http://open-webui:8080
       - OPENWEBUI_API_KEY=${OPENWEBUI_API_KEY-}
       - SYNC_INTERVAL_SECONDS=${SYNC_INTERVAL_SECONDS-900}
+    volumes:
+      - model-syncer-data:/app/data
     restart: unless-stopped
     logging:
       driver: json-file
@@ -165,6 +167,7 @@ volumes:
   cliproxyapi-logs:
     name: cliproxyapi-logs
   open-webui: {}
+  model-syncer-data: {}
 
 networks:
   dokploy-network:
