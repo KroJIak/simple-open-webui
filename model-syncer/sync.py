@@ -263,7 +263,9 @@ def sync_openwebui(cfg, entries):
         model_id = item['model']['alias']
         if model_id in state:
             continue
-        meta = {'hidden': True}
+        # No 'hidden' flag: the model lands in the "private" state — visible to
+        # the key owner only, never to regular users until they are granted.
+        meta = {}
         if item['levels']:
             meta['reasoning_effort_settings'] = {'available': item['levels']}
         try:
@@ -298,7 +300,7 @@ def sync_openwebui(cfg, entries):
         state.add(model_id)
         created += 1
         log(
-            f'open-webui: seeded "{model_id}" ({item["display_name"]}) hidden, '
+            f'open-webui: seeded "{model_id}" ({item["display_name"]}) private, '
             f'levels={item["levels"] or "none"}'
         )
 
@@ -307,6 +309,7 @@ def sync_openwebui(cfg, entries):
         log('open-webui: nothing new to seed')
     else:
         log(f'open-webui: seeded {created}, skipped existing, failed {failed}')
+    return created
 
 
 def run_cycle(cfg):
@@ -317,8 +320,20 @@ def run_cycle(cfg):
     entries = build_model_entries(upstream_ids, catalog)
     log(f'candidates for openai-compatibility: {len(entries)} (gpt-family excluded)')
 
-    sync_proxy(cfg, desired_compat_section(cfg, entries))
-    sync_openwebui(cfg, entries)
+    proxy_changed = sync_proxy(cfg, desired_compat_section(cfg, entries))
+    seeded = sync_openwebui(cfg, entries)
+
+    if (proxy_changed or seeded) and cfg['owui_key']:
+        # Refresh Open WebUI's base-model cache so users see new models
+        # without a manual admin refresh.
+        try:
+            http_json(
+                cfg['owui_base'].rstrip('/') + '/api/models?refresh=true',
+                headers={'Authorization': f'Bearer {cfg["owui_key"]}'},
+            )
+            log('open-webui: model cache refreshed')
+        except (urllib.error.URLError, OSError) as exc:
+            log(f'WARNING: cache refresh failed: {exc}')
 
 
 def load_config():
