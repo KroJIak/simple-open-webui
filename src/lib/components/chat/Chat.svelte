@@ -163,12 +163,7 @@
 	let codeInterpreterEnabled = false;
 
 	const CODEX_CLI_PROVIDER = 'codex_cli';
-	const DEFAULT_CODEX_REASONING_EFFORT = 'medium';
-	const REASONING_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'] as const;
-	const REASONING_EFFORT_FALLBACK_ORDER = [
-		DEFAULT_CODEX_REASONING_EFFORT,
-		...REASONING_EFFORT_LEVELS.filter((level) => level !== DEFAULT_CODEX_REASONING_EFFORT)
-	] as const;
+	const REASONING_EFFORT_EXCLUDED_LEVELS = ['none'];
 
 	const getModelProvider = (model: Model | undefined) =>
 		(model?.provider ?? (model as any)?.openai?.provider ?? '') as string;
@@ -176,22 +171,21 @@
 	const getModelMeta = (model: Model | undefined) =>
 		((model as any)?.info?.meta ?? (model as any)?.meta ?? {}) as Record<string, any>;
 
-	const hasValidReasoningEffort = (value: unknown): value is (typeof REASONING_EFFORT_LEVELS)[number] =>
+	const hasValidReasoningEffort = (value: unknown): value is string =>
 		typeof value === 'string' &&
-		REASONING_EFFORT_LEVELS.includes(value as (typeof REASONING_EFFORT_LEVELS)[number]);
+		value !== '' &&
+		!REASONING_EFFORT_EXCLUDED_LEVELS.includes(value);
 
 	const getReasoningEffortAvailableLevels = (model: Model | undefined) => {
 		const available = getModelMeta(model)?.reasoning_effort_settings?.available;
-		if (!Array.isArray(available)) return [...REASONING_EFFORT_LEVELS];
+		if (!Array.isArray(available)) return [];
 
-		return available.filter((level) =>
-			REASONING_EFFORT_LEVELS.includes(level as (typeof REASONING_EFFORT_LEVELS)[number])
-		);
+		return available.filter((level) => hasValidReasoningEffort(level));
 	};
 
 	const getAllowedReasoningEffortLevels = (modelIds: string[] = []) => {
 		if (modelIds.length === 0) {
-			return [...REASONING_EFFORT_LEVELS];
+			return [];
 		}
 
 		const selectedModels = modelIds
@@ -199,57 +193,38 @@
 			.filter((model) => model !== undefined);
 
 		if (selectedModels.length !== modelIds.length) {
-			return [...REASONING_EFFORT_LEVELS];
+			return [];
 		}
 
-		return REASONING_EFFORT_LEVELS.filter((level) =>
-			selectedModels.every((model) => getReasoningEffortAvailableLevels(model).includes(level))
-		);
+		return selectedModels
+			.map((model) => getReasoningEffortAvailableLevels(model))
+			.reduce((acc, levels) => acc.filter((level) => levels.includes(level)));
 	};
 
 	const getDefaultReasoningEffortForModels = (modelIds: string[] = []) => {
-		const allowedLevels = getAllowedReasoningEffortLevels(modelIds);
-
-		for (const level of REASONING_EFFORT_FALLBACK_ORDER) {
-			if (allowedLevels.includes(level)) {
-				return level;
-			}
-		}
-
-		return allowedLevels[0] ?? null;
-	};
-
-	const areAllModelIdsCodexCli = (modelIds: string[] = []) => {
-		if (modelIds.length === 0) {
-			return false;
-		}
-
-		return modelIds.every((modelId) => {
-			const model = $models.find((item) => item.id === modelId);
-			return model && getModelProvider(model) === CODEX_CLI_PROVIDER;
-		});
+		return getAllowedReasoningEffortLevels(modelIds)[0] ?? null;
 	};
 
 	const normalizeChatParams = (rawParams: Record<string, any> = {}, modelIds: string[] = []) => {
 		const nextParams = { ...(rawParams ?? {}) };
 		const allowedReasoningEffortLevels = getAllowedReasoningEffortLevels(modelIds);
+
+		if (allowedReasoningEffortLevels.length === 0) {
+			// None of the selected models exposes reasoning levels — never send an effort.
+			delete nextParams.reasoning_effort;
+			return nextParams;
+		}
+
 		const currentReasoningEffort = nextParams.reasoning_effort;
 		const currentReasoningEffortIsAllowed =
 			hasValidReasoningEffort(currentReasoningEffort) &&
 			allowedReasoningEffortLevels.includes(currentReasoningEffort);
 
 		if (!currentReasoningEffortIsAllowed) {
-			if (
-				areAllModelIdsCodexCli(modelIds) ||
-				allowedReasoningEffortLevels.length !== REASONING_EFFORT_LEVELS.length
-			) {
-				const fallbackReasoningEffort = getDefaultReasoningEffortForModels(modelIds);
-				if (fallbackReasoningEffort) {
-					nextParams.reasoning_effort = fallbackReasoningEffort;
-				} else {
-					delete nextParams.reasoning_effort;
-				}
-			} else if (currentReasoningEffort !== undefined) {
+			const fallbackReasoningEffort = getDefaultReasoningEffortForModels(modelIds);
+			if (fallbackReasoningEffort) {
+				nextParams.reasoning_effort = fallbackReasoningEffort;
+			} else {
 				delete nextParams.reasoning_effort;
 			}
 		}

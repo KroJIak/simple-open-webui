@@ -639,7 +639,7 @@
 	let availableChatModels = [];
 	let codexCliModels = [];
 	let codexCliWebSearchMode = false;
-	const REASONING_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'] as const;
+	let reasoningEffortLevels: string[] = [];
 	const DEFAULT_REASONING_DISABLED_TOOLTIP = 'бля, ну не наглей ты';
 
 	const formatMultiplier = (value: unknown) => {
@@ -666,15 +666,15 @@
 
 	const getReasoningEffortAvailableLevels = (model: Model | undefined) => {
 		const available = getReasoningEffortSettings(model)?.available;
-		if (!Array.isArray(available)) return [...REASONING_EFFORT_LEVELS];
+		if (!Array.isArray(available)) return [];
 
-		return available.filter((level) =>
-			REASONING_EFFORT_LEVELS.includes(level as (typeof REASONING_EFFORT_LEVELS)[number])
+		return available.filter(
+			(level) => typeof level === 'string' && level !== '' && level !== 'none'
 		);
 	};
 
 	const getReasoningEffortMultiplier = (
-		level: (typeof REASONING_EFFORT_LEVELS)[number],
+		level: string,
 		modelList: Model[]
 	) => {
 		const multiplier = modelList
@@ -694,7 +694,7 @@
 	};
 
 	const getReasoningEffortLabel = (
-		level: (typeof REASONING_EFFORT_LEVELS)[number],
+		level: string,
 		modelList: Model[]
 	) => {
 		const multiplier = getReasoningEffortMultiplier(level, modelList);
@@ -702,12 +702,12 @@
 	};
 
 	const isReasoningEffortAllowed = (
-		level: (typeof REASONING_EFFORT_LEVELS)[number],
+		level: string,
 		modelList: Model[]
 	) => modelList.every((model) => getReasoningEffortAvailableLevels(model).includes(level));
 
 	const getReasoningEffortDisabledTooltip = (
-		level: (typeof REASONING_EFFORT_LEVELS)[number],
+		level: string,
 		modelList: Model[]
 	) =>
 		modelList
@@ -752,20 +752,25 @@
 		deepWebSearchEnabled = false;
 	}
 
+	$: reasoningEffortLevels = (() => {
+		const models = atSelectedModel?.id ? [atSelectedModel] : currentModels;
+		if (models.length === 0) return [];
+
+		return models
+			.map((model) => getReasoningEffortAvailableLevels(model))
+			.reduce((acc, levels) => acc.filter((level) => levels.includes(level)));
+	})();
+
 	$: selectedReasoningEffort =
-		typeof params?.reasoning_effort === 'string' &&
-		REASONING_EFFORT_LEVELS.includes(
-			params.reasoning_effort as (typeof REASONING_EFFORT_LEVELS)[number]
-		)
+		typeof params?.reasoning_effort === 'string' && reasoningEffortLevels.includes(params.reasoning_effort)
 			? params.reasoning_effort
 			: null;
 
 	let selectedReasoningEffort: string | null = null;
-	let activeReasoningEffort: string = 'medium';
 
-	$: activeReasoningEffort = selectedReasoningEffort ?? 'medium';
+	$: activeReasoningEffort = selectedReasoningEffort ?? (reasoningEffortLevels[0] ?? '');
 
-	const setReasoningEffort = (level: (typeof REASONING_EFFORT_LEVELS)[number]) => {
+	const setReasoningEffort = (level: string) => {
 		if (!isReasoningEffortAllowed(level, currentModels)) return;
 
 		params = {
@@ -2177,7 +2182,7 @@
 										bind:this={inputControlsRightElement}
 										class="flex items-center shrink-0 gap-0.5"
 									>
-										{#if codexCliModels.length > 0 && codexCliModels.length === currentModels.length}
+										{#if reasoningEffortLevels.length > 0}
 											<Dropdown align="end" sideOffset={4}>
 												<Tooltip content={$i18n.t('Reasoning Effort')} placement="top">
 													<button
@@ -2195,7 +2200,7 @@
 													<div
 														class="min-w-[160px] rounded-2xl p-1 z-[9999999] bg-white dark:bg-black dark:text-white shadow-lg border border-gray-100 dark:border-white/12"
 													>
-														{#each REASONING_EFFORT_LEVELS as level}
+														{#each reasoningEffortLevels as level (level)}
 															{@const allowed = isReasoningEffortAllowed(level, currentModels)}
 															<Tooltip
 																content={allowed

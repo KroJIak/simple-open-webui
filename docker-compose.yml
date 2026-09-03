@@ -60,6 +60,25 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  model-syncer:
+    build: ./model-syncer
+    container_name: model-syncer
+    environment:
+      - CLIPROXYAPI_BASE_URL=http://cliproxyapi:8317
+      - CLIPROXYAPI_API_KEY=${CLIPROXYAPI_API_KEY}
+      - CLIPROXYAPI_MANAGEMENT_KEY=${CLIPROXYAPI_MANAGEMENT_KEY}
+      - CLIPROXYAPI_UPSTREAM_BASE_URL=${CLIPROXYAPI_UPSTREAM_BASE_URL}
+      - CLIPROXYAPI_UPSTREAM_API_KEY=${CLIPROXYAPI_UPSTREAM_API_KEY}
+      - OPENWEBUI_BASE_URL=http://open-webui:8080
+      - OPENWEBUI_API_KEY=${OPENWEBUI_API_KEY-}
+      - SYNC_INTERVAL_SECONDS=${SYNC_INTERVAL_SECONDS-900}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   open-webui:
     build:
       context: .

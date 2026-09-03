@@ -9,8 +9,7 @@ from open_webui.utils.misc import (
 )
 from open_webui.utils.task import prompt_template, prompt_variables_template
 
-REASONING_EFFORT_LEVELS = ('low', 'medium', 'high', 'xhigh')
-REASONING_EFFORT_FALLBACK_ORDER = ('medium', 'low', 'high', 'xhigh')
+REASONING_EFFORT_EXCLUDED_LEVELS = ('none',)
 
 
 # What goes out cannot be taken back. Let it be shaped
@@ -86,23 +85,24 @@ def remove_open_webui_params(params: dict) -> dict:
 
 
 def get_reasoning_effort_available_levels(model_meta: Optional[dict]) -> list[str]:
+    """Levels come exclusively from per-model settings; no model settings means no selector."""
     reasoning_settings = (
         model_meta.get('reasoning_effort_settings', {}) if isinstance(model_meta, dict) else {}
     )
     available = reasoning_settings.get('available')
 
     if not isinstance(available, list):
-        return list(REASONING_EFFORT_LEVELS)
+        return []
 
-    return [level for level in available if level in REASONING_EFFORT_LEVELS]
+    return [
+        level
+        for level in available
+        if isinstance(level, str) and level and level not in REASONING_EFFORT_EXCLUDED_LEVELS
+    ]
 
 
 def get_default_reasoning_effort(model_meta: Optional[dict]) -> Optional[str]:
     available_levels = get_reasoning_effort_available_levels(model_meta)
-
-    for level in REASONING_EFFORT_FALLBACK_ORDER:
-        if level in available_levels:
-            return level
 
     return available_levels[0] if available_levels else None
 

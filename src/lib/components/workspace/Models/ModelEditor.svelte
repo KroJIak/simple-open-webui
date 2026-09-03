@@ -107,7 +107,7 @@
 	let accessGrants = [];
 	let terminalId = '';
 	let tts = { voice: '' };
-	const REASONING_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'] as const;
+	const REASONING_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 	const DEFAULT_REASONING_DISABLED_TOOLTIP = 'бля, ну не наглей ты';
 
 	let usageMultiplier = '';
@@ -207,7 +207,8 @@
 			(level) => reasoningEffortAvailable[level]
 		);
 		const hasCustomReasoningSettings =
-			availableReasoningLevels.length !== REASONING_EFFORT_LEVELS.length ||
+			(availableReasoningLevels.length > 0 &&
+				availableReasoningLevels.length !== REASONING_EFFORT_LEVELS.length) ||
 			Object.keys(parsedReasoningMultipliers).length > 0 ||
 			reasoningEffortDisabledTooltip.trim() !== DEFAULT_REASONING_DISABLED_TOOLTIP;
 
@@ -418,7 +419,7 @@
 			const reasoningSettings = model?.meta?.reasoning_effort_settings ?? {};
 			const availableReasoningLevels = Array.isArray(reasoningSettings?.available)
 				? reasoningSettings.available
-				: REASONING_EFFORT_LEVELS;
+				: [];
 			reasoningEffortAvailable = Object.fromEntries(
 				REASONING_EFFORT_LEVELS.map((level) => [
 					level,
