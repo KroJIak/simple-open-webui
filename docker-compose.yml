@@ -1,6 +1,6 @@
 services:
   cliproxyapi:
-    image: eceasy/cli-proxy-api:latest
+    image: eceasy/cli-proxy-api:v7.2.149
     container_name: cliproxyapi
     ports:
       - 127.0.0.1:${CLIPROXYAPI_PORT-18317}:8317
