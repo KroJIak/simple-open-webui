@@ -178,6 +178,7 @@ def sync_proxy(cfg, section):
         current or {}, cfg['provider_name']
     ):
         log('proxy: openai-compatibility already up to date')
+        save_cached_section(cfg, section)
         return False
 
     # The Management API accepts both the wrapped object and a bare list.
@@ -195,8 +196,45 @@ def sync_proxy(cfg, section):
             continue
         models = section['openai-compatibility'][0]['models']
         log(f'proxy: pushed {len(models)} models')
+        save_cached_section(cfg, section)
         return True
     raise RuntimeError(f'proxy update failed: {last_error}')
+
+
+def cached_section_path(cfg):
+    return os.path.join(cfg['state_path'].rsplit('/', 1)[0], 'last_section.json')
+
+
+def save_cached_section(cfg, section):
+    try:
+        with open(cached_section_path(cfg), 'w') as f:
+            json.dump(section, f)
+    except OSError as exc:
+        log(f'WARNING: cannot cache section: {exc}')
+
+
+def load_cached_section(cfg):
+    try:
+        with open(cached_section_path(cfg)) as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def quick_restore_check(cfg):
+    """Re-push the cached section if the proxy lost it (e.g. after a restart)."""
+    section = load_cached_section(cfg)
+    if not section:
+        return
+    current = http_json(
+        cfg['proxy_base'].rstrip('/') + '/v0/management/openai-compatibility',
+        headers={'Authorization': f'Bearer {cfg["management_key"]}'},
+    )
+    if section_signature(section, cfg['provider_name']) != section_signature(
+        current or {}, cfg['provider_name']
+    ):
+        log('proxy: compat section lost, restoring from cache')
+        sync_proxy(cfg, section)
 
 
 def load_state(path):
@@ -295,6 +333,7 @@ def load_config():
         'owui_key': env('OPENWEBUI_API_KEY'),
         'state_path': env('SYNC_STATE_PATH', '/app/data/seeded.json'),
         'interval': int(env('SYNC_INTERVAL_SECONDS', '900')),
+        'check_interval': int(env('SYNC_CHECK_INTERVAL_SECONDS', '60')),
         'once': env('SYNC_ONCE', '0') == '1',
     }
     missing = [
@@ -309,14 +348,21 @@ def load_config():
 
 def main():
     cfg = load_config()
+    last_full = 0.0
     while True:
         try:
-            run_cycle(cfg)
+            if time.time() - last_full >= cfg['interval']:
+                run_cycle(cfg)
+                last_full = time.time()
+            else:
+                # Fast recovery loop: re-push the cached section if the proxy
+                # restarted and its generated config lost the compat section.
+                quick_restore_check(cfg)
         except Exception as exc:  # keep the loop alive; the next cycle retries
             log(f'ERROR: {exc}')
         if cfg['once']:
             break
-        time.sleep(cfg['interval'])
+        time.sleep(cfg['check_interval'])
 
 
 if __name__ == '__main__':
