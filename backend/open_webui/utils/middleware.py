@@ -2562,8 +2562,17 @@ async def process_chat_payload(request, form_data, user, metadata, model):
     features = form_data.pop('features', None) or {}
     extra_params['__features__'] = features
     request.state.deep_web_search = bool(features.get('deep_web_search') and features.get('web_search'))
+    # The native provider web_search tool is only attached when the model's
+    # capabilities allow it: some provider channels fail requests that carry
+    # this tool type.
+    model_web_search_cap = (
+        (model.get('info', {}).get('meta', {}).get('capabilities') or {}).get('web_search', True)
+        if isinstance(model, dict)
+        else True
+    )
     request.state.native_provider_web_search = bool(
         features.get('web_search')
+        and model_web_search_cap
         and getattr(request.app.state.config, 'ENABLE_NATIVE_PROVIDER_WEB_SEARCH', False)
         and metadata.get('params', {}).get('function_calling') == 'native'
     )
