@@ -2595,7 +2595,8 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                 form_data = await chat_memory_handler(request, form_data, extra_params, user)
 
         if 'web_search' in features and features['web_search']:
-            # Prefer the provider's own built-in web_search tool when enabled.
+            # Prefer the provider's own built-in web_search tool when enabled;
+            # otherwise run the server-side search so the feature still works.
             if request.state.native_provider_web_search:
                 if request.state.deep_web_search:
                     form_data['messages'] = add_or_update_system_message(
@@ -2603,19 +2604,19 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                         form_data['messages'],
                         append=True,
                     )
-            # Skip forced RAG web search when native FC is enabled - model can use web_search tool
-            elif metadata.get('params', {}).get('function_calling') != 'native':
+            else:
                 form_data = await chat_web_search_handler(request, form_data, extra_params, user)
-            elif request.state.deep_web_search:
-                form_data['messages'] = add_or_update_system_message(
-                    'When deep web search is enabled, do not answer after a single search result. Use web search, then open and read multiple promising sources before you answer. Prefer recent primary or reputable sources, compare them, and only then produce the final answer.',
-                    form_data['messages'],
-                    append=True,
-                )
 
         if 'image_generation' in features and features['image_generation']:
-            # Skip forced image generation when native FC is enabled - model can use generate_image tool
-            if metadata.get('params', {}).get('function_calling') != 'native':
+            # Run the server-side image generation when the model has no
+            # native generate_image capability; models with the capability
+            # use their own generate_image tool instead.
+            model_image_gen_cap = (
+                (model.get('info', {}).get('meta', {}).get('capabilities') or {}).get('image_generation', True)
+                if isinstance(model, dict)
+                else True
+            )
+            if metadata.get('params', {}).get('function_calling') != 'native' or not model_image_gen_cap:
                 form_data = await chat_image_generation_handler(request, form_data, extra_params, user)
 
         if 'code_interpreter' in features and features['code_interpreter']:
