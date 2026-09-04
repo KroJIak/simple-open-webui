@@ -461,9 +461,11 @@ async def get_builtin_tools(
             request.app.state.config.USER_PERMISSIONS,
         )
 
-    # Time utilities - available for date calculations
+    # Time utilities - available for date calculations. calculate_timestamp
+    # alone covers the current-time case (days_ago defaults to 0); some
+    # provider channels fail requests that carry both time functions.
     if is_builtin_tool_enabled('time'):
-        builtin_functions.extend([get_current_timestamp, calculate_timestamp])
+        builtin_functions.extend([calculate_timestamp])
 
     # Knowledge base tools - conditional injection based on model knowledge
     # If model has attached knowledge (any type), only provide query_knowledge_files
