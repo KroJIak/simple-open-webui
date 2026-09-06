@@ -668,9 +668,7 @@
 		const available = getReasoningEffortSettings(model)?.available;
 		if (!Array.isArray(available)) return [];
 
-		return available.filter(
-			(level) => typeof level === 'string' && level !== '' && level !== 'none'
-		);
+		return available.filter((level) => typeof level === 'string' && level !== '');
 	};
 
 	const getReasoningEffortMultiplier = (
@@ -2182,7 +2180,7 @@
 										bind:this={inputControlsRightElement}
 										class="flex items-center shrink-0 gap-0.5"
 									>
-										{#if reasoningEffortLevels.length > 0}
+										{#if reasoningEffortLevels.length > 1}
 											<Dropdown align="end" sideOffset={4}>
 												<Tooltip content={$i18n.t('Reasoning Effort')} placement="top">
 													<button

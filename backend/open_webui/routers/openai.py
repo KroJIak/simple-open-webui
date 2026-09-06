@@ -460,6 +460,17 @@ async def get_all_models_responses(request: Request, user: UserModel) -> list:
                 if provider:
                     model['provider'] = provider
 
+                # Мост (и models.dev) отдают уровни размышлений в стандартном
+                # формате reasoning_options — переводим в формат селектора.
+                meta = model.get('meta')
+                if isinstance(meta, dict) and isinstance(meta.get('reasoning_options'), list):
+                    values = []
+                    for option in meta['reasoning_options']:
+                        if isinstance(option, dict) and option.get('type') == 'effort':
+                            values += [v for v in (option.get('values') or []) if isinstance(v, str) and v]
+                    if values:
+                        meta['reasoning_effort_settings'] = {'available': values}
+
     log.debug(f'get_all_models:responses() {responses}')
     return responses
 

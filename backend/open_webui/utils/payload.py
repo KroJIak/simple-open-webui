@@ -9,8 +9,6 @@ from open_webui.utils.misc import (
 )
 from open_webui.utils.task import prompt_template, prompt_variables_template
 
-REASONING_EFFORT_EXCLUDED_LEVELS = ('none',)
-
 
 # What goes out cannot be taken back. Let it be shaped
 # well before it leaves this place.
@@ -94,11 +92,7 @@ def get_reasoning_effort_available_levels(model_meta: Optional[dict]) -> list[st
     if not isinstance(available, list):
         return []
 
-    return [
-        level
-        for level in available
-        if isinstance(level, str) and level and level not in REASONING_EFFORT_EXCLUDED_LEVELS
-    ]
+    return [level for level in available if isinstance(level, str) and level]
 
 
 def get_default_reasoning_effort(model_meta: Optional[dict]) -> Optional[str]:

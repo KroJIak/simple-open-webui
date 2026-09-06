@@ -18,7 +18,7 @@ class PayloadReasoningTests(unittest.TestCase):
 
         sanitized = sanitize_reasoning_effort_for_model(payload, model_meta)
 
-        self.assertEqual(sanitized['reasoning_effort'], 'medium')
+        self.assertEqual(sanitized['reasoning_effort'], 'low')
 
     def test_sanitize_reasoning_effort_removes_value_when_no_levels_are_allowed(self):
         payload = {'reasoning_effort': 'high'}
@@ -34,7 +34,7 @@ class PayloadReasoningTests(unittest.TestCase):
 
         sanitized = apply_model_params_to_body_openai({}, payload, model_meta)
 
-        self.assertEqual(sanitized['reasoning_effort'], 'medium')
+        self.assertEqual(sanitized['reasoning_effort'], 'low')
 
 
 if __name__ == '__main__':

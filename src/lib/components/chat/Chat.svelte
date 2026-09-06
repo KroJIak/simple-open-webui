@@ -163,7 +163,6 @@
 	let codeInterpreterEnabled = false;
 
 	const CODEX_CLI_PROVIDER = 'codex_cli';
-	const REASONING_EFFORT_EXCLUDED_LEVELS = ['none'];
 
 	const getModelProvider = (model: Model | undefined) =>
 		(model?.provider ?? (model as any)?.openai?.provider ?? '') as string;
@@ -172,9 +171,7 @@
 		((model as any)?.info?.meta ?? (model as any)?.meta ?? {}) as Record<string, any>;
 
 	const hasValidReasoningEffort = (value: unknown): value is string =>
-		typeof value === 'string' &&
-		value !== '' &&
-		!REASONING_EFFORT_EXCLUDED_LEVELS.includes(value);
+		typeof value === 'string' && value !== '';
 
 	const getReasoningEffortAvailableLevels = (model: Model | undefined) => {
 		const available = getModelMeta(model)?.reasoning_effort_settings?.available;
