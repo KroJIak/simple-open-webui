@@ -558,7 +558,13 @@ class SafePlaywrightURLLoader(PlaywrightURLLoader, RateLimitMixin, URLProcessing
 
     def lazy_load(self) -> Iterator[Document]:
         """Safely load URLs synchronously with support for remote browser."""
-        from playwright.sync_api import sync_playwright
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as exc:
+            raise RuntimeError(
+                'The playwright web loader is not available in this deployment. '
+                'Use WEB_LOADER_ENGINE=safe_web or an external loader.'
+            ) from exc
 
         with sync_playwright() as p:
             # Use remote browser if ws_endpoint is provided, otherwise use local browser
@@ -588,7 +594,13 @@ class SafePlaywrightURLLoader(PlaywrightURLLoader, RateLimitMixin, URLProcessing
 
     async def alazy_load(self) -> AsyncIterator[Document]:
         """Safely load URLs asynchronously with support for remote browser."""
-        from playwright.async_api import async_playwright
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError as exc:
+            raise RuntimeError(
+                'The playwright web loader is not available in this deployment. '
+                'Use WEB_LOADER_ENGINE=safe_web or an external loader.'
+            ) from exc
 
         async with async_playwright() as p:
             # Use remote browser if ws_endpoint is provided, otherwise use local browser

@@ -133,7 +133,7 @@ RUN chown -R $UID:$GID /app $HOME
 # Runtime system dependencies only (no compiler, no dev headers).
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    git pandoc \
+    git \
     netcat-openbsd curl jq \
     ffmpeg libsm6 libxext6 zstd \
     && rm -rf /var/lib/apt/lists/*

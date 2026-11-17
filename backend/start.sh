@@ -16,17 +16,6 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 cd "$SCRIPT_DIR" || exit 1
 
-# ── Playwright browser installation (if configured) ──────────────────────────
-
-if [[ "${WEB_LOADER_ENGINE,,}" == "playwright" ]]; then
-  if [[ -z "${PLAYWRIGHT_WS_URL:-}" ]]; then
-    echo "Installing Playwright Chromium browser..."
-    playwright install chromium
-    playwright install-deps chromium
-  fi
-  python -c "import nltk; nltk.download('punkt_tab')"
-fi
-
 # ── Secret key setup ─────────────────────────────────────────────────────────
 
 KEY_FILE="${WEBUI_SECRET_KEY_FILE:-.webui_secret_key}"

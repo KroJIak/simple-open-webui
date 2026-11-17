@@ -12,9 +12,17 @@ vite.config.ts.timestamp-*
 __pycache__
 .idea
 venv
+.venv
 _old
 uploads
 .ipynb_checkpoints
 **/*.db
 _test
 backend/data/*
+
+# local build artifacts
+/build
+/.svelte-kit
+/static/pyodide
+__pycache__
+*.pyc
