@@ -120,6 +120,7 @@ class ImagesConfig(BaseModel):
 
     IMAGE_GENERATION_ENGINE: str
     IMAGE_GENERATION_MODEL: str
+    IMAGE_GENERATION_MODEL_FALLBACKS: str
     IMAGE_SIZE: str | None
     IMAGE_STEPS: int | None
 
@@ -164,6 +165,7 @@ async def get_config(request: Request, user=Depends(get_admin_user)):
         'ENABLE_IMAGE_PROMPT_GENERATION': request.app.state.config.ENABLE_IMAGE_PROMPT_GENERATION,
         'IMAGE_GENERATION_ENGINE': request.app.state.config.IMAGE_GENERATION_ENGINE,
         'IMAGE_GENERATION_MODEL': request.app.state.config.IMAGE_GENERATION_MODEL,
+        'IMAGE_GENERATION_MODEL_FALLBACKS': request.app.state.config.IMAGE_GENERATION_MODEL_FALLBACKS,
         'IMAGE_SIZE': request.app.state.config.IMAGE_SIZE,
         'IMAGE_STEPS': request.app.state.config.IMAGE_STEPS,
         'IMAGES_OPENAI_API_BASE_URL': request.app.state.config.IMAGES_OPENAI_API_BASE_URL,
@@ -205,6 +207,7 @@ async def update_config(request: Request, form_data: ImagesConfig, user=Depends(
 
     request.app.state.config.IMAGE_GENERATION_ENGINE = form_data.IMAGE_GENERATION_ENGINE
     await set_image_model(request, form_data.IMAGE_GENERATION_MODEL)
+    request.app.state.config.IMAGE_GENERATION_MODEL_FALLBACKS = form_data.IMAGE_GENERATION_MODEL_FALLBACKS
     if form_data.IMAGE_SIZE == 'auto' and not re.match(
         IMAGE_AUTO_SIZE_MODELS_REGEX_PATTERN, form_data.IMAGE_GENERATION_MODEL
     ):
@@ -273,6 +276,7 @@ async def update_config(request: Request, form_data: ImagesConfig, user=Depends(
         'ENABLE_IMAGE_PROMPT_GENERATION': request.app.state.config.ENABLE_IMAGE_PROMPT_GENERATION,
         'IMAGE_GENERATION_ENGINE': request.app.state.config.IMAGE_GENERATION_ENGINE,
         'IMAGE_GENERATION_MODEL': request.app.state.config.IMAGE_GENERATION_MODEL,
+        'IMAGE_GENERATION_MODEL_FALLBACKS': request.app.state.config.IMAGE_GENERATION_MODEL_FALLBACKS,
         'IMAGE_SIZE': request.app.state.config.IMAGE_SIZE,
         'IMAGE_STEPS': request.app.state.config.IMAGE_STEPS,
         'IMAGES_OPENAI_API_BASE_URL': request.app.state.config.IMAGES_OPENAI_API_BASE_URL,
@@ -594,39 +598,67 @@ async def image_generations(
             if request.app.state.config.IMAGES_OPENAI_API_VERSION:
                 url = f'{url}?api-version={request.app.state.config.IMAGES_OPENAI_API_VERSION}'
 
-            data = {
-                'model': model,
-                'prompt': form_data.prompt,
-                'n': form_data.n,
-                **(
-                    {'size': form_data.size or request.app.state.config.IMAGE_SIZE}
-                    if (form_data.size or request.app.state.config.IMAGE_SIZE)
-                    else {}
-                ),
-                **(
-                    {}
-                    if re.match(
-                        IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN,
-                        request.app.state.config.IMAGE_GENERATION_MODEL,
-                    )
-                    else {'response_format': 'b64_json'}
-                ),
-                **(
-                    {}
-                    if not request.app.state.config.IMAGES_OPENAI_API_PARAMS
-                    else request.app.state.config.IMAGES_OPENAI_API_PARAMS
-                ),
-            }
+            # Model chain: the configured model first, then the fallbacks. The
+            # provider breaks/rotates image models regularly - with a chain the
+            # feature keeps working instead of failing on the first error.
+            fallback_models = [
+                model_id.strip()
+                for model_id in (
+                    request.app.state.config.IMAGE_GENERATION_MODEL_FALLBACKS or ''
+                ).split(',')
+                if model_id.strip()
+            ]
+            model_chain = [model] + [m for m in fallback_models if m and m != model]
 
             session = await get_session()
-            async with session.post(
-                url=url,
-                json=data,
-                headers=headers,
-                ssl=AIOHTTP_CLIENT_SESSION_SSL,
-            ) as r:
-                r.raise_for_status()
-                res = await r.json(content_type=None)
+            res = None
+            used_model = model
+            last_error: Exception | None = None
+
+            for candidate in model_chain:
+                data = {
+                    'model': candidate,
+                    'prompt': form_data.prompt,
+                    'n': form_data.n,
+                    **(
+                        {'size': form_data.size or request.app.state.config.IMAGE_SIZE}
+                        if (form_data.size or request.app.state.config.IMAGE_SIZE)
+                        else {}
+                    ),
+                    **(
+                        {}
+                        if re.match(
+                            IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN,
+                            candidate,
+                        )
+                        else {'response_format': 'b64_json'}
+                    ),
+                    **(
+                        {}
+                        if not request.app.state.config.IMAGES_OPENAI_API_PARAMS
+                        else request.app.state.config.IMAGES_OPENAI_API_PARAMS
+                    ),
+                }
+
+                try:
+                    async with session.post(
+                        url=url,
+                        json=data,
+                        headers=headers,
+                        ssl=AIOHTTP_CLIENT_SESSION_SSL,
+                    ) as r:
+                        r.raise_for_status()
+                        res = await r.json(content_type=None)
+                except Exception as exc:
+                    last_error = exc
+                    log.warning(f'Image generation failed for model "{candidate}": {exc}')
+                    continue
+
+                used_model = candidate
+                break
+
+            if res is None:
+                raise last_error if last_error else RuntimeError('Image generation failed')
 
             images = []
 
@@ -639,7 +671,13 @@ async def image_generations(
                 else:
                     image_data, content_type = await get_image_data(image['b64_json'])
 
-                _, url = await upload_image(request, image_data, content_type, {**data, **metadata}, user)
+                _, url = await upload_image(
+                    request,
+                    image_data,
+                    content_type,
+                    {**data, 'model': used_model, **metadata},
+                    user,
+                )
                 images.append({'url': url})
             return images
 

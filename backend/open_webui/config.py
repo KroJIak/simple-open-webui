@@ -285,83 +285,12 @@ ENABLE_DIRECT_CONNECTIONS = ConfigVar(
 )
 
 ####################################
-# OLLAMA_BASE_URL
+# OLLAMA
 ####################################
+# Ollama is not supported in this deployment - the only model provider is the
+# OpenAI-compatible API (CLIProxyAPI).
 
-ENABLE_OLLAMA_API = ConfigVar(
-    'ENABLE_OLLAMA_API',
-    'ollama.enable',
-    os.getenv('ENABLE_OLLAMA_API', 'True').lower() == 'true',
-)
-
-OLLAMA_API_BASE_URL = os.getenv('OLLAMA_API_BASE_URL', 'http://localhost:11434/api')
-
-OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', '')
-if OLLAMA_BASE_URL:
-    # Remove trailing slash
-    OLLAMA_BASE_URL = OLLAMA_BASE_URL[:-1] if OLLAMA_BASE_URL.endswith('/') else OLLAMA_BASE_URL
-
-
-K8S_FLAG = os.getenv('K8S_FLAG', '')
-USE_OLLAMA_DOCKER = os.getenv('USE_OLLAMA_DOCKER', 'false')
-
-if OLLAMA_BASE_URL == '' and OLLAMA_API_BASE_URL != '':
-    OLLAMA_BASE_URL = OLLAMA_API_BASE_URL[:-4] if OLLAMA_API_BASE_URL.endswith('/api') else OLLAMA_API_BASE_URL
-
-if ENV == 'prod':
-    if OLLAMA_BASE_URL == '/ollama' and not K8S_FLAG:
-        if USE_OLLAMA_DOCKER.lower() == 'true':
-            # if you use all-in-one docker container (Open WebUI + Ollama)
-            # with the docker build arg USE_OLLAMA=true (--build-arg="USE_OLLAMA=true") this only works with http://localhost:11434
-            OLLAMA_BASE_URL = 'http://localhost:11434'
-        else:
-            OLLAMA_BASE_URL = 'http://host.docker.internal:11434'
-    elif K8S_FLAG:
-        OLLAMA_BASE_URL = 'http://ollama-service.open-webui.svc.cluster.local:11434'
-
-
-def _resolve_ollama_base_url(url: str) -> str:
-    """If the default Ollama port (11434) is unreachable, try the fallback port (12434)."""
-
-    def reachable(host: str, port: int) -> bool:
-        try:
-            with socket.create_connection((host, port), timeout=1.0):
-                return True
-        except (OSError, TimeoutError):
-            return False
-
-    host = urlparse(url).hostname or 'localhost'
-
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        default = pool.submit(reachable, host, 11434)
-        fallback = pool.submit(reachable, host, 12434)
-
-    if not default.result() and fallback.result():
-        url = url.replace(':11434', ':12434')
-        log.info(f'Ollama port 11434 unreachable on {host}, falling back to 12434')
-    elif not default.result():
-        log.info(f'Ollama ports 11434 and 12434 both unreachable on {host}')
-
-    return url
-
-
-# Auto-resolve Ollama port when no explicit URL was provided by the user.
-# The Dockerfile default is "/ollama" which the block above rewrites to :11434.
-if os.getenv('OLLAMA_BASE_URL', '') in ('', '/ollama') and not os.getenv('OLLAMA_BASE_URLS', ''):
-    OLLAMA_BASE_URL = _resolve_ollama_base_url(OLLAMA_BASE_URL)
-
-
-OLLAMA_BASE_URLS = os.getenv('OLLAMA_BASE_URLS', '')
-OLLAMA_BASE_URLS = OLLAMA_BASE_URLS if OLLAMA_BASE_URLS != '' else OLLAMA_BASE_URL
-
-OLLAMA_BASE_URLS = [url.strip() for url in OLLAMA_BASE_URLS.split(';')]
-OLLAMA_BASE_URLS = ConfigVar('OLLAMA_BASE_URLS', 'ollama.base_urls', OLLAMA_BASE_URLS)
-
-OLLAMA_API_CONFIGS = ConfigVar(
-    'OLLAMA_API_CONFIGS',
-    'ollama.api_configs',
-    {},
-)
+ENABLE_OLLAMA_API = False
 
 ####################################
 # OPENAI_API
@@ -1308,15 +1237,9 @@ PDF_LOADER_MODE = ConfigVar(
 RAG_EMBEDDING_MODEL = ConfigVar(
     'RAG_EMBEDDING_MODEL',
     'rag.embedding_model',
-    os.getenv('RAG_EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2'),
+    os.getenv('RAG_EMBEDDING_MODEL', ''),
 )
 log.info(f'Embedding model set: {RAG_EMBEDDING_MODEL.value}')
-
-RAG_EMBEDDING_MODEL_AUTO_UPDATE = (
-    not OFFLINE_MODE and os.getenv('RAG_EMBEDDING_MODEL_AUTO_UPDATE', 'True').lower() == 'true'
-)
-
-RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE = os.getenv('RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE', 'True').lower() == 'true'
 
 RAG_EMBEDDING_BATCH_SIZE = ConfigVar(
     'RAG_EMBEDDING_BATCH_SIZE',
@@ -1356,12 +1279,6 @@ RAG_RERANKING_MODEL = ConfigVar(
 if RAG_RERANKING_MODEL.value != '':
     log.info(f'Reranking model set: {RAG_RERANKING_MODEL.value}')
 
-
-RAG_RERANKING_MODEL_AUTO_UPDATE = (
-    not OFFLINE_MODE and os.getenv('RAG_RERANKING_MODEL_AUTO_UPDATE', 'True').lower() == 'true'
-)
-
-RAG_RERANKING_MODEL_TRUST_REMOTE_CODE = os.getenv('RAG_RERANKING_MODEL_TRUST_REMOTE_CODE', 'True').lower() == 'true'
 
 RAG_RERANKING_BATCH_SIZE = ConfigVar(
     'RAG_RERANKING_BATCH_SIZE',
@@ -1481,19 +1398,6 @@ RAG_AZURE_OPENAI_API_VERSION = ConfigVar(
     'rag.azure_openai.api_version',
     os.getenv('RAG_AZURE_OPENAI_API_VERSION', ''),
 )
-
-RAG_OLLAMA_BASE_URL = ConfigVar(
-    'RAG_OLLAMA_BASE_URL',
-    'rag.ollama.url',
-    os.getenv('RAG_OLLAMA_BASE_URL', OLLAMA_BASE_URL),
-)
-
-RAG_OLLAMA_API_KEY = ConfigVar(
-    'RAG_OLLAMA_API_KEY',
-    'rag.ollama.key',
-    os.getenv('RAG_OLLAMA_API_KEY', ''),
-)
-
 
 ENABLE_RAG_LOCAL_WEB_FETCH = os.getenv('ENABLE_RAG_LOCAL_WEB_FETCH', 'False').lower() == 'true'
 
@@ -1632,12 +1536,6 @@ WEB_SEARCH_TRUST_ENV = ConfigVar(
     os.getenv('WEB_SEARCH_TRUST_ENV', 'True').lower() == 'true',
 )
 
-
-OLLAMA_CLOUD_WEB_SEARCH_API_KEY = ConfigVar(
-    'OLLAMA_CLOUD_WEB_SEARCH_API_KEY',
-    'rag.web.search.ollama_cloud_api_key',
-    os.getenv('OLLAMA_CLOUD_API_KEY', ''),
-)
 
 SEARXNG_QUERY_URL = ConfigVar(
     'SEARXNG_QUERY_URL',
@@ -1979,6 +1877,16 @@ IMAGE_GENERATION_MODEL = ConfigVar(
     os.getenv('IMAGE_GENERATION_MODEL', ''),
 )
 
+# Comma separated list of image models used as a fallback chain: the primary
+# IMAGE_GENERATION_MODEL is tried first, then every entry here in order. The
+# provider rotates/breaks image models regularly, so a chain keeps the feature
+# working instead of failing on the first error.
+IMAGE_GENERATION_MODEL_FALLBACKS = ConfigVar(
+    'IMAGE_GENERATION_MODEL_FALLBACKS',
+    'image_generation.model_fallbacks',
+    os.getenv('IMAGE_GENERATION_MODEL_FALLBACKS', ''),
+)
+
 # Regex pattern for models that support IMAGE_SIZE = "auto".
 IMAGE_AUTO_SIZE_MODELS_REGEX_PATTERN = os.getenv('IMAGE_AUTO_SIZE_MODELS_REGEX_PATTERN', '^gpt-image')
 
@@ -2291,14 +2199,6 @@ WHISPER_MODEL = ConfigVar(
     'audio.stt.whisper_model',
     os.getenv('WHISPER_MODEL', 'base'),
 )
-
-WHISPER_COMPUTE_TYPE = os.getenv('WHISPER_COMPUTE_TYPE', 'int8')
-WHISPER_MODEL_DIR = os.getenv('WHISPER_MODEL_DIR', f'{CACHE_DIR}/whisper/models')
-WHISPER_MODEL_AUTO_UPDATE = not OFFLINE_MODE and os.getenv('WHISPER_MODEL_AUTO_UPDATE', '').lower() == 'true'
-
-WHISPER_VAD_FILTER = os.getenv('WHISPER_VAD_FILTER', 'False').lower() == 'true'
-
-WHISPER_MULTILINGUAL = os.getenv('WHISPER_MULTILINGUAL', 'False').lower() == 'true'
 
 WHISPER_LANGUAGE = os.getenv('WHISPER_LANGUAGE', '').lower() or None
 
