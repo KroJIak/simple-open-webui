@@ -768,13 +768,12 @@
 
 	let selectedReasoningEffort: string | null = null;
 
-	// Default effort: the second entry from the bottom of the level list. The
-	// list comes from the external catalog and its order is not fixed, so the
-	// default always follows the provider's own ordering. A model that exposes
+	// Default effort: the second level of the list the provider returns (e.g.
+	// "medium" for low -> medium -> high -> xhigh -> max). A model that exposes
 	// a single level keeps that level.
 	const getDefaultReasoningEffort = (levels: string[] = []) => {
 		if (levels.length === 0) return '';
-		return levels.length >= 2 ? levels[levels.length - 2] : levels[0];
+		return levels.length >= 2 ? levels[1] : levels[0];
 	};
 
 	$: activeReasoningEffort =

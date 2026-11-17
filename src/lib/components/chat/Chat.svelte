@@ -183,13 +183,13 @@
 		return available.filter((level) => hasValidReasoningEffort(level));
 	};
 
-	// The effort ladder comes from the external catalog (models.dev) and its
-	// order is not fixed - the default is the second entry from the bottom of
-	// that list, so it always follows the provider's own ordering. A model
-	// that exposes a single level keeps that level.
+	// The effort ladder comes from the external catalog (models.dev). The
+	// default is the second level of that list (e.g. "medium" for
+	// low -> medium -> high -> xhigh -> max), so it follows the provider's own
+	// ordering. A model that exposes a single level keeps that level.
 	const getDefaultReasoningEffort = (levels: string[] = []) => {
 		if (levels.length === 0) return null;
-		return levels.length >= 2 ? levels[levels.length - 2] : levels[0];
+		return levels.length >= 2 ? levels[1] : levels[0];
 	};
 
 	// Returns null when the levels cannot be determined yet (the model list is
