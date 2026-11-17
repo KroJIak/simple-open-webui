@@ -52,15 +52,30 @@ def env(name, default=None):
     return value
 
 
-def http_json(url, method='GET', body=None, headers=None):
+def http_json(url, method='GET', body=None, headers=None, quiet=False):
     req = urllib.request.Request(url, method=method)
     req.add_header('Content-Type', 'application/json')
     req.add_header('User-Agent', 'model-syncer/1.0')
     for key, value in (headers or {}).items():
         req.add_header(key, value)
     data = json.dumps(body).encode() if body is not None else None
-    with urllib.request.urlopen(req, data=data, timeout=REQUEST_TIMEOUT) as resp:
-        raw = resp.read()
+    try:
+        with urllib.request.urlopen(req, data=data, timeout=REQUEST_TIMEOUT) as resp:
+            raw = resp.read()
+    except urllib.error.HTTPError as exc:
+        # Log the target: a bare "401 Unauthorized" does not tell whether the
+        # upstream key or the proxy management key is dead.
+        detail = ''
+        try:
+            detail = exc.read().decode(errors='replace')[:200]
+        except Exception:
+            pass
+        # Keep the body around: callers need it to tell a duplicate model
+        # ("already registered", answered with 401) from a real failure.
+        exc.body = detail
+        if not quiet:
+            log(f'ERROR: {method} {url} -> HTTP {exc.code}: {detail}')
+        raise
     return json.loads(raw) if raw else None
 
 
@@ -219,10 +234,27 @@ def cached_section_path(cfg):
     return os.path.join(cfg['state_path'].rsplit('/', 1)[0], 'last_section.json')
 
 
+def strip_credentials(section):
+    """Drop the API key before caching: the upstream key can be rotated and a
+    stale key in the cache would restore a broken section."""
+    cached = json.loads(json.dumps(section))
+    for entry in cached.get('openai-compatibility') or []:
+        entry['api-key-entries'] = []
+    return cached
+
+
+def with_current_credentials(cfg, section):
+    """Re-inject the currently configured upstream key into a cached section."""
+    restored = json.loads(json.dumps(section))
+    for entry in restored.get('openai-compatibility') or []:
+        entry['api-key-entries'] = [{'api-key': cfg['upstream_key']}]
+    return restored
+
+
 def save_cached_section(cfg, section):
     try:
         with open(cached_section_path(cfg), 'w') as f:
-            json.dump(section, f)
+            json.dump(strip_credentials(section), f)
     except OSError as exc:
         log(f'WARNING: cannot cache section: {exc}')
 
@@ -236,10 +268,15 @@ def load_cached_section(cfg):
 
 
 def quick_restore_check(cfg):
-    """Re-push the cached section if the proxy lost it (e.g. after a restart)."""
-    section = load_cached_section(cfg)
-    if not section:
+    """Re-push the cached section if the proxy lost it (e.g. after a restart).
+
+    The cached section never contains credentials - the current upstream key is
+    injected here, so a rotated key cannot resurrect a dead section.
+    """
+    cached = load_cached_section(cfg)
+    if not cached:
         return
+    section = with_current_credentials(cfg, cached)
     current = http_json(
         cfg['proxy_base'].rstrip('/') + '/v0/management/openai-compatibility',
         headers={'Authorization': f'Bearer {cfg["management_key"]}'},
@@ -299,16 +336,17 @@ def sync_openwebui(cfg, entries):
                     'is_active': True,
                 },
                 headers=headers,
+                quiet=True,
             )
         except urllib.error.HTTPError as exc:
-            body = exc.read().decode(errors='replace').lower()
+            body = getattr(exc, 'body', '') or ''
             # Duplicate id: the API answers 401 with MODEL_ID_TAKEN ("already
             # registered") — the row exists, keep it untouched.
-            if 'already registered' in body or 'already exist' in body:
+            if 'already registered' in body.lower() or 'already exist' in body.lower():
                 state.add(model_id)
                 continue
             failed += 1
-            log(f'open-webui: failed to seed "{model_id}": HTTP {exc.code}')
+            log(f'open-webui: failed to seed "{model_id}": HTTP {exc.code} {body[:120]}')
             continue
         except (urllib.error.URLError, OSError) as exc:
             failed += 1
@@ -349,7 +387,7 @@ def run_cycle(cfg):
                 headers={'Authorization': f'Bearer {cfg["owui_key"]}'},
             )
             log('open-webui: model cache refreshed')
-        except (urllib.error.URLError, OSError) as exc:
+        except Exception as exc:
             log(f'WARNING: cache refresh failed: {exc}')
 
 
@@ -384,8 +422,14 @@ def main():
     while True:
         try:
             if time.time() - last_full >= cfg['interval']:
-                run_cycle(cfg)
-                last_full = time.time()
+                try:
+                    run_cycle(cfg)
+                finally:
+                    # Advance the schedule even when the cycle failed. Otherwise
+                    # the loop retries the failing cycle every check_interval and
+                    # never reaches the fast recovery path below, so a proxy
+                    # restart would permanently lose the compat section.
+                    last_full = time.time()
             else:
                 # Fast recovery loop: re-push the cached section if the proxy
                 # restarted and its generated config lost the compat section.
