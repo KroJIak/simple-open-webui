@@ -183,17 +183,28 @@
 		return available.filter((level) => hasValidReasoningEffort(level));
 	};
 
-	const getAllowedReasoningEffortLevels = (modelIds: string[] = []) => {
+	// The effort ladder comes from the external catalog (models.dev) and its
+	// order is not fixed - the default is the second entry from the bottom of
+	// that list, so it always follows the provider's own ordering. A model
+	// that exposes a single level keeps that level.
+	const getDefaultReasoningEffort = (levels: string[] = []) => {
+		if (levels.length === 0) return null;
+		return levels.length >= 2 ? levels[levels.length - 2] : levels[0];
+	};
+
+	// Returns null when the levels cannot be determined yet (the model list is
+	// still loading or the model is not part of it). The caller must not touch
+	// the stored effort in that case - dropping it would silently reset the
+	// user's choice on every reload.
+	const getAllowedReasoningEffortLevels = (modelIds: string[] = []): string[] | null => {
 		if (modelIds.length === 0) {
 			return [];
 		}
 
-		const selectedModels = modelIds
-			.map((modelId) => $models.find((item) => item.id === modelId))
-			.filter((model) => model !== undefined);
+		const selectedModels = modelIds.map((modelId) => $models.find((item) => item.id === modelId));
 
-		if (selectedModels.length !== modelIds.length) {
-			return [];
+		if (selectedModels.some((model) => model === undefined)) {
+			return null;
 		}
 
 		return selectedModels
@@ -201,13 +212,15 @@
 			.reduce((acc, levels) => acc.filter((level) => levels.includes(level)));
 	};
 
-	const getDefaultReasoningEffortForModels = (modelIds: string[] = []) => {
-		return getAllowedReasoningEffortLevels(modelIds)[0] ?? null;
-	};
-
 	const normalizeChatParams = (rawParams: Record<string, any> = {}, modelIds: string[] = []) => {
 		const nextParams = { ...(rawParams ?? {}) };
 		const allowedReasoningEffortLevels = getAllowedReasoningEffortLevels(modelIds);
+
+		if (allowedReasoningEffortLevels === null) {
+			// The models are not known (yet) - keep the stored effort untouched
+			// instead of resetting it to the default.
+			return nextParams;
+		}
 
 		if (allowedReasoningEffortLevels.length === 0) {
 			// None of the selected models exposes reasoning levels — never send an effort.
@@ -221,7 +234,7 @@
 			allowedReasoningEffortLevels.includes(currentReasoningEffort);
 
 		if (!currentReasoningEffortIsAllowed) {
-			const fallbackReasoningEffort = getDefaultReasoningEffortForModels(modelIds);
+			const fallbackReasoningEffort = getDefaultReasoningEffort(allowedReasoningEffortLevels);
 			if (fallbackReasoningEffort) {
 				nextParams.reasoning_effort = fallbackReasoningEffort;
 			} else {
@@ -576,8 +589,10 @@
 
 			// Set Default Features
 			if (model?.info?.meta?.defaultFeatureIds) {
+				// The image capability flag is not required here: a model without a
+				// native generate_image tool falls back to the server-side image
+				// generation, which is the normal path for our provider models.
 				if (
-					model.info?.meta?.capabilities?.['image_generation'] &&
 					$config?.features?.enable_image_generation &&
 					($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
 				) {
@@ -1340,10 +1355,41 @@
 	const hasSelectedModel = (modelIds: string[] = []) =>
 		modelIds.length > 0 && modelIds.some((modelId) => modelId && modelId !== '');
 
-	const resolveSelectedModelsForNewChat = async (force = false) => {
-		const availableModels = $models
+	// Models the user can actually pick (hidden ones are filtered out in the
+	// model selector as well).
+	const getAvailableModelIds = () =>
+		$models
 			.filter((m) => !(m?.info?.meta?.hidden ?? m?.meta?.hidden ?? false))
 			.map((m) => m.id);
+
+	// The model to use when nothing valid is selected: the user default, then
+	// the instance default, then the first model in the list.
+	const getFallbackModels = (availableModels: string[] = getAvailableModelIds()): string[] => {
+		if (availableModels.length === 0) {
+			return [];
+		}
+
+		const fromSettings = ($settings?.models ?? []).filter((modelId) =>
+			availableModels.includes(modelId)
+		);
+		if (fromSettings.length > 0) {
+			return fromSettings;
+		}
+
+		const defaultModels = ($config?.default_models ?? '')
+			.split(',')
+			.map((modelId) => modelId.trim())
+			.filter(Boolean);
+		const fromConfig = defaultModels.filter((modelId) => availableModels.includes(modelId));
+		if (fromConfig.length > 0) {
+			return fromConfig;
+		}
+
+		return [availableModels[0]];
+	};
+
+	const resolveSelectedModelsForNewChat = async (force = false) => {
+		const availableModels = getAvailableModelIds();
 
 		if (availableModels.length === 0) {
 			return;
@@ -1361,7 +1407,6 @@
 			}
 		}
 
-		const defaultModels = $config?.default_models ? $config?.default_models.split(',') : [];
 		let nextSelectedModels = [...selectedModels];
 
 		if ($page.url.searchParams.get('models') || $page.url.searchParams.get('model')) {
@@ -1400,26 +1445,44 @@
 			sessionStorage.removeItem('selectedModels');
 		} else if ($settings?.models) {
 			nextSelectedModels = $settings?.models;
-		} else if (defaultModels && defaultModels.length > 0) {
-			nextSelectedModels = defaultModels;
 		}
 
 		nextSelectedModels = nextSelectedModels.filter((modelId) => availableModels.includes(modelId));
 
 		if (!hasSelectedModel(nextSelectedModels)) {
-			if (defaultModels && defaultModels.length > 0) {
-				nextSelectedModels = defaultModels.filter((modelId) => availableModels.includes(modelId));
-			}
-
-			if (!hasSelectedModel(nextSelectedModels)) {
-				nextSelectedModels = [availableModels.at(0) ?? ''];
-			}
+			nextSelectedModels = getFallbackModels(availableModels);
 		}
 
 		if (!equal(nextSelectedModels, selectedModels)) {
 			selectedModels = nextSelectedModels;
 		}
 	};
+
+	// Keep a usable model selected at all times. Without this the selector
+	// shows an empty "Select a model" button whenever the model saved in the
+	// chat is not part of the current catalog (or the list is still loading).
+	$: {
+		if ($models.length > 0 && atSelectedModel === undefined) {
+			const availableModels = getAvailableModelIds();
+
+			if (availableModels.length > 0) {
+				const validSelectedModels = selectedModels.filter(
+					(modelId) => modelId && availableModels.includes(modelId)
+				);
+
+				if (validSelectedModels.length > 0) {
+					if (!equal(validSelectedModels, selectedModels)) {
+						selectedModels = validSelectedModels;
+					}
+				} else if (!hasSelectedModel(selectedModels)) {
+					const fallbackModels = getFallbackModels(availableModels);
+					if (fallbackModels.length > 0 && !equal(fallbackModels, selectedModels)) {
+						selectedModels = fallbackModels;
+					}
+				}
+			}
+		}
+	}
 
 	const initNewChat = async () => {
 		console.log('initNewChat');

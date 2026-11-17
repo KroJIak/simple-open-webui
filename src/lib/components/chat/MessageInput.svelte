@@ -768,7 +768,17 @@
 
 	let selectedReasoningEffort: string | null = null;
 
-	$: activeReasoningEffort = selectedReasoningEffort ?? (reasoningEffortLevels[0] ?? '');
+	// Default effort: the second entry from the bottom of the level list. The
+	// list comes from the external catalog and its order is not fixed, so the
+	// default always follows the provider's own ordering. A model that exposes
+	// a single level keeps that level.
+	const getDefaultReasoningEffort = (levels: string[] = []) => {
+		if (levels.length === 0) return '';
+		return levels.length >= 2 ? levels[levels.length - 2] : levels[0];
+	};
+
+	$: activeReasoningEffort =
+		selectedReasoningEffort ?? getDefaultReasoningEffort(reasoningEffortLevels);
 
 	const setReasoningEffort = (level: string) => {
 		if (!isReasoningEffortAllowed(level, currentModels)) return;
@@ -810,9 +820,10 @@
 		($_user.role === 'admin' || $_user?.permissions?.features?.web_search);
 
 	let showImageGenerationButton = false;
+	// The image capability flag decides HOW the image is produced (native
+	// generate_image tool vs. server-side generation), not WHETHER the user
+	// may turn the feature on - otherwise the toggle could never be enabled.
 	$: showImageGenerationButton =
-		(atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).length ===
-			imageGenerationCapableModels.length &&
 		$config?.features?.enable_image_generation &&
 		($_user.role === 'admin' || $_user?.permissions?.features?.image_generation);
 
@@ -2191,7 +2202,7 @@
 														class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-white/10 rounded-full h-8 pl-3 pr-2 flex items-center gap-1.5 outline-hidden focus:outline-hidden text-[15px] font-medium"
 														aria-label={$i18n.t('Reasoning Effort')}
 													>
-														<span>{selectedReasoningEffort ?? 'medium'}</span>
+														<span>{selectedReasoningEffort ?? getDefaultReasoningEffort(reasoningEffortLevels) ?? 'medium'}</span>
 														<ChevronDown className="size-3.5 text-gray-500 dark:text-white" />
 													</button>
 												</Tooltip>
