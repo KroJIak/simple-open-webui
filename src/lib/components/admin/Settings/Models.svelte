@@ -178,7 +178,16 @@
 		workspaceModels = await getBaseModels(localStorage.token);
 		baseModels = await getModels(localStorage.token, null, true);
 
-		models = baseModels.map((m) => {
+		// Models that only exist in the workspace (seeded by the model syncer,
+		// not present in the connection catalog) must be listed as well -
+		// otherwise they are invisible in the admin panel.
+		const connectionModelIds = new Set(baseModels.map((m) => m.id));
+		const listedModels = [
+			...baseModels,
+			...workspaceModels.filter((wm) => !connectionModelIds.has(wm.id))
+		];
+
+		models = listedModels.map((m) => {
 			const workspaceModel = workspaceModels.find((wm) => wm.id === m.id);
 
 			if (workspaceModel) {
@@ -608,11 +617,7 @@
 								>
 									<Tooltip
 										content={marked.parse(
-											!!model?.meta?.description
-												? model?.meta?.description
-												: model?.ollama?.digest
-													? `${model?.ollama?.digest} **(${model?.ollama?.modified_at})**`
-													: model.id
+											!!model?.meta?.description ? model?.meta?.description : model.id
 										)}
 										className=" w-fit"
 										placement="top-start"
@@ -644,11 +649,7 @@
 										class=" text-xs overflow-hidden text-ellipsis line-clamp-1 flex items-center gap-1 text-gray-500"
 									>
 										<span class=" line-clamp-1">
-											{!!model?.meta?.description
-												? model?.meta?.description
-												: model?.ollama?.digest
-													? `${model.id} (${model?.ollama?.digest})`
-													: model.id}
+											{model?.meta?.description ? model?.meta?.description : model.id}
 										</span>
 									</div>
 								</div>

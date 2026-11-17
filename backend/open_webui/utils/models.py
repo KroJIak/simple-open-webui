@@ -16,7 +16,7 @@ from open_webui.models.functions import Functions
 from open_webui.models.groups import Groups
 from open_webui.models.models import Models
 from open_webui.models.users import UserModel
-from open_webui.routers import ollama, openai
+from open_webui.routers import openai
 from open_webui.socket.utils import RedisDict
 from open_webui.utils.access_control import has_access, has_base_model_access
 from open_webui.utils.plugin import (
@@ -26,24 +26,6 @@ from open_webui.utils.plugin import (
 
 logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
 log = logging.getLogger(__name__)
-
-
-async def fetch_ollama_models(request: Request, user: UserModel = None):
-    raw_ollama_models = await ollama.get_all_models(request, user=user)
-    return [
-        {
-            'id': model['model'],
-            'name': model['name'],
-            'object': 'model',
-            'created': 0,
-            'owned_by': 'ollama',
-            'ollama': model,
-            'loaded': 'expires_at' in model,
-            'connection_type': model.get('connection_type', 'local'),
-            'tags': model.get('tags', []),
-        }
-        for model in raw_ollama_models['models']
-    ]
 
 
 async def fetch_openai_models(request: Request, user: UserModel = None):
@@ -57,16 +39,11 @@ async def get_all_base_models(request: Request, user: UserModel = None):
         if request.app.state.config.ENABLE_OPENAI_API
         else asyncio.sleep(0, result=[])
     )
-    ollama_task = (
-        fetch_ollama_models(request, user)
-        if request.app.state.config.ENABLE_OLLAMA_API
-        else asyncio.sleep(0, result=[])
-    )
     function_task = get_function_models(request)
 
-    openai_models, ollama_models, function_models = await asyncio.gather(openai_task, ollama_task, function_task)
+    openai_models, function_models = await asyncio.gather(openai_task, function_task)
 
-    return function_models + openai_models + ollama_models
+    return function_models + openai_models
 
 
 async def get_all_models(request, refresh: bool = False, user: UserModel = None):
@@ -130,12 +107,8 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
 
     custom_models = await Models.get_all_models()
 
-    # Single O(1) lookup: Ollama base names first, then exact IDs (exact wins).
-    base_model_lookup = {}
-    for model in models:
-        if model.get('owned_by') == 'ollama':
-            base_model_lookup.setdefault(model['id'].split(':')[0], model)
-        base_model_lookup[model['id']] = model
+    # Single O(1) lookup by exact id.
+    base_model_lookup = {model['id']: model for model in models}
 
     existing_ids = {m['id'] for m in models}
 
@@ -164,6 +137,31 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
                     model['filter_ids'] = filter_ids
                 else:
                     models.remove(model)
+
+            elif custom_model.is_active and custom_model.id not in existing_ids:
+                # A model that only exists in the workspace (no matching model
+                # in the connection catalog) still belongs to the list. Dropping
+                # it would make the chat selector lose the model, and with it
+                # the model saved in an existing chat.
+                models.append(
+                    {
+                        'id': f'{custom_model.id}',
+                        'name': custom_model.name,
+                        'object': 'model',
+                        'created': custom_model.created_at,
+                        'owned_by': 'openai',
+                        'preset': True,
+                    }
+                )
+
+                info = custom_model.model_dump()
+                if 'params' in info:
+                    # Remove params to avoid exposing sensitive info
+                    del info['params']
+
+                models[-1]['info'] = info
+                models[-1]['action_ids'] = []
+                models[-1]['filter_ids'] = []
 
         elif custom_model.is_active:
             if custom_model.id in existing_ids:
