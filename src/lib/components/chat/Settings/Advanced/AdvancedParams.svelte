@@ -1223,14 +1223,14 @@
 	<div class=" py-0.5 w-full justify-between">
 		<Tooltip
 			content={$i18n.t(
-				'This option enables or disables the use of the reasoning feature in Ollama, which allows the model to think before generating a response. When enabled, the model can take a moment to process the conversation context and generate a more thoughtful response.'
+				'This option enables or disables the use of the reasoning feature, which allows the model to think before generating a response. When enabled, the model can take a moment to process the conversation context and generate a more thoughtful response.'
 			)}
 			placement="top-start"
 			className="inline-tooltip"
 		>
 			<div class=" py-0.5 flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'think'} ({$i18n.t('Ollama')})
+					{'think'}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition"
@@ -1283,7 +1283,7 @@
 		>
 			<div class=" py-0.5 flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'format'} ({$i18n.t('Ollama')})
+					{'format'}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition"
@@ -1322,7 +1322,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'num_keep'} ({$i18n.t('Ollama')})
+					{'num_keep'}
 				</div>
 
 				<button
@@ -1375,7 +1375,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'num_ctx'} ({$i18n.t('Ollama')})
+					{'num_ctx'}
 				</div>
 
 				<button
@@ -1430,7 +1430,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'num_batch'} ({$i18n.t('Ollama')})
+					{'num_batch'}
 				</div>
 
 				<button
@@ -1486,7 +1486,7 @@
 			>
 				<div class="flex w-full justify-between">
 					<div class=" self-center text-xs">
-						{'num_thread'} ({$i18n.t('Ollama')})
+						{'num_thread'}
 					</div>
 
 					<button
@@ -1542,7 +1542,7 @@
 			>
 				<div class="flex w-full justify-between">
 					<div class=" self-center text-xs">
-						{'num_gpu'} ({$i18n.t('Ollama')})
+						{'num_gpu'}
 					</div>
 
 					<button
@@ -1598,7 +1598,7 @@
 			>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div class=" self-center text-xs">
-						{'keep_alive'} ({$i18n.t('Ollama')})
+						{'keep_alive'}
 					</div>
 					<button
 						class="p-1 px-3 text-xs flex rounded-sm transition"

@@ -3,15 +3,15 @@ set -euo pipefail
 
 # ---------------------------------------------------------------------------
 # Container entry point for Open WebUI.
-# Handles secret key generation, optional Ollama/CUDA/Playwright setup,
-# HuggingFace Space deployment, and launches the uvicorn server.
+# Handles secret key generation, optional Playwright setup, HuggingFace Space
+# deployment, and launches the uvicorn server.
 # ---------------------------------------------------------------------------
 
 # Default optional env vars that we test below with bash's `,,` lowercase
 # expansion. The two can't be combined inline (`${VAR:-default,,}` makes
 # the default literal `,,`), so we normalise once up front and the simple
 # `${VAR,,}` form stays safe under `set -u` everywhere else.
-: "${WEB_LOADER_ENGINE:=}" "${USE_OLLAMA_DOCKER:=}" "${USE_CUDA_DOCKER:=}"
+: "${WEB_LOADER_ENGINE:=}"
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 cd "$SCRIPT_DIR" || exit 1
@@ -43,20 +43,6 @@ if [[ -z "${WEBUI_SECRET_KEY:-}" && -z "${WEBUI_JWT_SECRET_KEY:-}" ]]; then
 
   echo "Loading WEBUI_SECRET_KEY from ${KEY_FILE}"
   WEBUI_SECRET_KEY=$(cat "$KEY_FILE")
-fi
-
-# ── Ollama (bundled Docker image) ────────────────────────────────────────────
-
-if [[ "${USE_OLLAMA_DOCKER,,}" == "true" ]]; then
-  echo "Starting bundled ollama serve..."
-  ollama serve &
-fi
-
-# ── CUDA library paths ──────────────────────────────────────────────────────
-
-if [[ "${USE_CUDA_DOCKER,,}" == "true" ]]; then
-  echo "CUDA enabled — extending LD_LIBRARY_PATH for torch/cudnn libraries."
-  export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:/usr/local/lib/python3.11/site-packages/torch/lib:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib"
 fi
 
 # ── HuggingFace Space deployment ─────────────────────────────────────────────

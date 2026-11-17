@@ -41,30 +41,9 @@ except ImportError:
 
 DOCKER = os.getenv('DOCKER', 'False').lower() == 'true'
 
-USE_CUDA = os.getenv('USE_CUDA_DOCKER', 'false')
+# No local ML runtime in this deployment: embeddings and reranking are done
+# through an OpenAI-compatible API, so torch is not installed at all.
 DEVICE_TYPE = 'cpu'
-_cuda_error: Optional[str] = None
-
-if USE_CUDA.lower() == 'true':
-    try:
-        import torch  # noqa: E402
-
-        if not torch.cuda.is_available():
-            raise RuntimeError('CUDA not available')
-        DEVICE_TYPE = 'cuda'
-    except Exception as exc:
-        _cuda_error = f'CUDA unavailable (USE_CUDA_DOCKER=true), falling back to CPU: {exc}'
-        os.environ['USE_CUDA_DOCKER'] = 'false'
-        USE_CUDA = 'false'
-
-if sys.platform == 'darwin' and DEVICE_TYPE == 'cpu':
-    try:
-        import torch  # noqa: E402
-
-        if torch.backends.mps.is_available() and torch.backends.mps.is_built():
-            DEVICE_TYPE = 'mps'
-    except Exception:
-        pass
 
 ####################################
 # LOGGING
@@ -118,10 +97,6 @@ else:
 
 log = logging.getLogger(__name__)
 log.info('GLOBAL_LOG_LEVEL: %s', GLOBAL_LOG_LEVEL)
-
-if _cuda_error:
-    log.error(_cuda_error)
-    _cuda_error = None
 
 SRC_LOG_LEVELS = {}  # Legacy variable, do not remove
 
@@ -944,36 +919,8 @@ else:
 ####################################
 # SENTENCE TRANSFORMERS
 ####################################
-
-
-SENTENCE_TRANSFORMERS_BACKEND = os.getenv('SENTENCE_TRANSFORMERS_BACKEND', '')
-if SENTENCE_TRANSFORMERS_BACKEND == '':
-    SENTENCE_TRANSFORMERS_BACKEND = 'torch'
-
-
-SENTENCE_TRANSFORMERS_MODEL_KWARGS = os.getenv('SENTENCE_TRANSFORMERS_MODEL_KWARGS', '')
-if SENTENCE_TRANSFORMERS_MODEL_KWARGS == '':
-    SENTENCE_TRANSFORMERS_MODEL_KWARGS = None
-else:
-    try:
-        SENTENCE_TRANSFORMERS_MODEL_KWARGS = json.loads(SENTENCE_TRANSFORMERS_MODEL_KWARGS)
-    except Exception:
-        SENTENCE_TRANSFORMERS_MODEL_KWARGS = None
-
-
-SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND = os.getenv('SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND', '')
-if SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND == '':
-    SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND = 'torch'
-
-
-SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS = os.getenv('SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS', '')
-if SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS == '':
-    SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS = None
-else:
-    try:
-        SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS = json.loads(SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS)
-    except Exception:
-        SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS = None
+# Removed: local embeddings/reranking are not used in this deployment, the
+# embedding API (RAG_EMBEDDING_ENGINE=openai) is used instead.
 
 # Whether to apply sigmoid normalization to CrossEncoder reranking scores.
 # When enabled (default), scores are normalized to 0-1 range for proper

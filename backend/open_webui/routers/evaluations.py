@@ -50,20 +50,13 @@ router = APIRouter()
 
 import os
 
-EMBEDDING_MODEL_NAME = os.environ.get('AUXILIARY_EMBEDDING_MODEL', 'TaylorAI/bge-micro-v2')
-_embedding_model = None
-
-
 def _get_embedding_model():
-    global _embedding_model
-    if _embedding_model is None:
-        try:
-            from sentence_transformers import SentenceTransformer
+    """Local embedding models are not available in this deployment.
 
-            _embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-        except Exception as e:
-            log.error(f'Embedding model load failed: {e}')
-    return _embedding_model
+    The leaderboard falls back to unweighted Elo ratings instead of
+    query-weighted ones.
+    """
+    return None
 
 
 def _calculate_elo(feedbacks: list[LeaderboardFeedbackData], similarities: dict = None) -> dict:

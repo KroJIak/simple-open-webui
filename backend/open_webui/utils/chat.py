@@ -14,9 +14,6 @@ from open_webui.functions import generate_function_chat_completion
 from open_webui.models.functions import Functions
 from open_webui.models.models import Models
 from open_webui.models.users import UserModel
-from open_webui.routers.ollama import (
-    generate_chat_completion as generate_ollama_chat_completion,
-)
 from open_webui.routers.openai import (
     generate_chat_completion as generate_openai_chat_completion,
 )
@@ -34,11 +31,6 @@ from open_webui.utils.filter import (
     process_filter_functions,
 )
 from open_webui.utils.models import check_model_access, get_all_models
-from open_webui.utils.payload import convert_payload_openai_to_ollama
-from open_webui.utils.response import (
-    convert_response_ollama_to_openai,
-    convert_streaming_response_ollama_to_openai,
-)
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
 logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
@@ -161,7 +153,7 @@ async def generate_chat_completion(
         bypass_filter = True
 
     # Propagate bypass_filter and bypass_system_prompt via request.state so that
-    # downstream route handlers (openai/ollama) can read them without exposing
+    # downstream route handlers can read them without exposing
     # them as query parameters.
     request.state.bypass_filter = bypass_filter
     request.state.bypass_system_prompt = bypass_system_prompt
@@ -274,23 +266,6 @@ async def generate_chat_completion(
         if model.get('pipe'):
             # Below does not require bypass_filter because this is the only route the uses this function and it is already bypassing the filter
             return await generate_function_chat_completion(request, form_data, user=user, models=models)
-        if model.get('owned_by') == 'ollama':
-            # Using /ollama/api/chat endpoint
-            form_data = convert_payload_openai_to_ollama(form_data)
-            response = await generate_ollama_chat_completion(
-                request=request,
-                form_data=form_data,
-                user=user,
-            )
-            if form_data.get('stream'):
-                response.headers['content-type'] = 'text/event-stream'
-                return StreamingResponse(
-                    convert_streaming_response_ollama_to_openai(response),
-                    headers=dict(response.headers),
-                    background=response.background,
-                )
-            else:
-                return convert_response_ollama_to_openai(response)
         else:
             return await generate_openai_chat_completion(
                 request=request,

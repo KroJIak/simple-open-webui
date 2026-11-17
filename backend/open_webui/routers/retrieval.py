@@ -37,11 +37,7 @@ from open_webui.config import (
     DEFAULT_LOCALE,
     ENV,
     RAG_EMBEDDING_CONTENT_PREFIX,
-    RAG_EMBEDDING_MODEL_AUTO_UPDATE,
-    RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE,
     RAG_EMBEDDING_QUERY_PREFIX,
-    RAG_RERANKING_MODEL_AUTO_UPDATE,
-    RAG_RERANKING_MODEL_TRUST_REMOTE_CODE,
     UPLOAD_DIR,
 )
 from open_webui.constants import ERROR_MESSAGES
@@ -49,11 +45,6 @@ from open_webui.env import (
     DEVICE_TYPE,
     DOCKER,
     RAG_EMBEDDING_TIMEOUT,
-    SENTENCE_TRANSFORMERS_BACKEND,
-    SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND,
-    SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS,
-    SENTENCE_TRANSFORMERS_CROSS_ENCODER_SIGMOID_ACTIVATION_FUNCTION,
-    SENTENCE_TRANSFORMERS_MODEL_KWARGS,
 )
 from open_webui.internal.db import get_async_db, get_async_session
 from open_webui.models.files import FileModel, Files, FileUpdateForm
@@ -66,7 +57,6 @@ from open_webui.retrieval.utils import (
     filter_accessible_collections,
     get_content_from_url,
     get_embedding_function,
-    get_model_path,
     get_reranking_function,
     query_collection,
     query_collection_with_hybrid_search,
@@ -92,7 +82,6 @@ from open_webui.retrieval.web.kagi import search_kagi
 # Web search engines
 from open_webui.retrieval.web.main import SearchResult
 from open_webui.retrieval.web.mojeek import search_mojeek
-from open_webui.retrieval.web.ollama import search_ollama_cloud
 from open_webui.retrieval.web.perplexity import search_perplexity
 from open_webui.retrieval.web.perplexity_search import search_perplexity_search
 from open_webui.retrieval.web.searchapi import search_searchapi
@@ -133,24 +122,18 @@ log = logging.getLogger(__name__)
 def get_ef(
     engine: str,
     embedding_model: str,
-    auto_update: bool = RAG_EMBEDDING_MODEL_AUTO_UPDATE,
 ):
-    ef = None
-    if embedding_model and engine == '':
-        from sentence_transformers import SentenceTransformer
+    """Local embedding models are not available in this deployment.
 
-        try:
-            ef = SentenceTransformer(
-                get_model_path(embedding_model, auto_update),
-                device=DEVICE_TYPE,
-                trust_remote_code=RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE,
-                backend=SENTENCE_TRANSFORMERS_BACKEND,
-                model_kwargs=SENTENCE_TRANSFORMERS_MODEL_KWARGS,
-            )
-        except Exception as e:
-            log.error(f'Error loading SentenceTransformer: {e}')
-
-    return ef
+    Embeddings are provided by an OpenAI-compatible API (RAG_EMBEDDING_ENGINE),
+    so no sentence-transformers/torch runtime is installed.
+    """
+    if engine == '' and embedding_model:
+        log.info(
+            'Local embedding models are disabled - configure RAG_EMBEDDING_ENGINE '
+            '(openai) with a base url, an api key and a model name.'
+        )
+    return None
 
 
 def get_rf(
@@ -159,74 +142,31 @@ def get_rf(
     external_reranker_url: str = '',
     external_reranker_api_key: str = '',
     external_reranker_timeout: str = '',
-    auto_update: bool = RAG_RERANKING_MODEL_AUTO_UPDATE,
 ):
+    """Only the external reranker is supported - no local reranking models."""
     rf = None
     # Convert timeout string to int or None (system default)
     timeout_value = int(external_reranker_timeout) if external_reranker_timeout else None
     if reranking_model:
-        if any(model in reranking_model for model in ['jinaai/jina-colbert-v2']):
-            try:
-                from open_webui.retrieval.models.colbert import ColBERT
+        if engine != 'external':
+            log.warning(
+                f'Local reranking models are not supported - ignoring "{reranking_model}". '
+                'Use RAG_RERANKING_ENGINE=external with RAG_EXTERNAL_RERANKER_URL.'
+            )
+            return None
 
-                rf = ColBERT(
-                    get_model_path(reranking_model, auto_update),
-                    env='docker' if DOCKER else None,
-                )
+        try:
+            from open_webui.retrieval.models.external import ExternalReranker
 
-            except Exception as e:
-                log.error(f'ColBERT: {e}')
-                raise Exception(ERROR_MESSAGES.DEFAULT(e))
-        else:
-            if engine == 'external':
-                try:
-                    from open_webui.retrieval.models.external import ExternalReranker
-
-                    rf = ExternalReranker(
-                        url=external_reranker_url,
-                        api_key=external_reranker_api_key,
-                        model=reranking_model,
-                        timeout=timeout_value,
-                    )
-                except Exception as e:
-                    log.error(f'ExternalReranking: {e}')
-                    raise Exception(ERROR_MESSAGES.DEFAULT(e))
-            else:
-                import sentence_transformers
-                import torch
-
-                try:
-                    rf = sentence_transformers.CrossEncoder(
-                        get_model_path(reranking_model, auto_update),
-                        device=DEVICE_TYPE,
-                        trust_remote_code=RAG_RERANKING_MODEL_TRUST_REMOTE_CODE,
-                        backend=SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND,
-                        model_kwargs=SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS,
-                        activation_fn=(
-                            torch.nn.Sigmoid()
-                            if SENTENCE_TRANSFORMERS_CROSS_ENCODER_SIGMOID_ACTIVATION_FUNCTION
-                            else None
-                        ),
-                    )
-                except Exception as e:
-                    log.error(f'CrossEncoder: {e}')
-                    raise Exception(ERROR_MESSAGES.DEFAULT('CrossEncoder error'))
-
-                # Safely adjust pad_token_id if missing as some models do not have this in config
-                try:
-                    model_cfg = getattr(rf, 'model', None)
-                    if model_cfg and hasattr(model_cfg, 'config'):
-                        cfg = model_cfg.config
-                        if getattr(cfg, 'pad_token_id', None) is None:
-                            # Fallback to eos_token_id when available
-                            eos = getattr(cfg, 'eos_token_id', None)
-                            if eos is not None:
-                                cfg.pad_token_id = eos
-                                log.debug(f'Missing pad_token_id detected; set to eos_token_id={eos}')
-                            else:
-                                log.warning('Neither pad_token_id nor eos_token_id present in model config')
-                except Exception as e2:
-                    log.warning(f'Failed to adjust pad_token_id on CrossEncoder: {e2}')
+            rf = ExternalReranker(
+                url=external_reranker_url,
+                api_key=external_reranker_api_key,
+                model=reranking_model,
+                timeout=timeout_value,
+            )
+        except Exception as e:
+            log.error(f'ExternalReranking: {e}')
+            raise Exception(ERROR_MESSAGES.DEFAULT(e))
 
     return rf
 
@@ -266,10 +206,6 @@ async def get_embedding_config(request: Request, user=Depends(get_admin_user)):
             'url': request.app.state.config.RAG_OPENAI_API_BASE_URL,
             'key': request.app.state.config.RAG_OPENAI_API_KEY,
         },
-        'ollama_config': {
-            'url': request.app.state.config.RAG_OLLAMA_BASE_URL,
-            'key': request.app.state.config.RAG_OLLAMA_API_KEY,
-        },
         'azure_openai_config': {
             'url': request.app.state.config.RAG_AZURE_OPENAI_BASE_URL,
             'key': request.app.state.config.RAG_AZURE_OPENAI_API_KEY,
@@ -283,11 +219,6 @@ class OpenAIConfigForm(BaseModel):
     key: str
 
 
-class OllamaConfigForm(BaseModel):
-    url: str
-    key: str
-
-
 class AzureOpenAIConfigForm(BaseModel):
     url: str
     key: str
@@ -296,7 +227,6 @@ class AzureOpenAIConfigForm(BaseModel):
 
 class EmbeddingModelUpdateForm(BaseModel):
     openai_config: OpenAIConfigForm | None = None
-    ollama_config: OllamaConfigForm | None = None
     azure_openai_config: AzureOpenAIConfigForm | None = None
     RAG_EMBEDDING_ENGINE: str
     RAG_EMBEDDING_MODEL: str
@@ -313,11 +243,6 @@ def unload_embedding_model(request: Request):
         import gc
 
         gc.collect()
-        if DEVICE_TYPE == 'cuda':
-            import torch
-
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
 
 
 @router.post('/embedding/update')
@@ -334,17 +259,12 @@ async def update_embedding_config(request: Request, form_data: EmbeddingModelUpd
         request.app.state.config.RAG_EMBEDDING_CONCURRENT_REQUESTS = form_data.RAG_EMBEDDING_CONCURRENT_REQUESTS
 
         if request.app.state.config.RAG_EMBEDDING_ENGINE in [
-            'ollama',
             'openai',
             'azure_openai',
         ]:
             if form_data.openai_config is not None:
                 request.app.state.config.RAG_OPENAI_API_BASE_URL = form_data.openai_config.url
                 request.app.state.config.RAG_OPENAI_API_KEY = form_data.openai_config.key
-
-            if form_data.ollama_config is not None:
-                request.app.state.config.RAG_OLLAMA_BASE_URL = form_data.ollama_config.url
-                request.app.state.config.RAG_OLLAMA_API_KEY = form_data.ollama_config.key
 
             if form_data.azure_openai_config is not None:
                 request.app.state.config.RAG_AZURE_OPENAI_BASE_URL = form_data.azure_openai_config.url
@@ -361,22 +281,14 @@ async def update_embedding_config(request: Request, form_data: EmbeddingModelUpd
             request.app.state.config.RAG_EMBEDDING_MODEL,
             request.app.state.ef,
             (
-                request.app.state.config.RAG_OPENAI_API_BASE_URL
-                if request.app.state.config.RAG_EMBEDDING_ENGINE == 'openai'
-                else (
-                    request.app.state.config.RAG_OLLAMA_BASE_URL
-                    if request.app.state.config.RAG_EMBEDDING_ENGINE == 'ollama'
-                    else request.app.state.config.RAG_AZURE_OPENAI_BASE_URL
-                )
+                request.app.state.config.RAG_AZURE_OPENAI_BASE_URL
+                if request.app.state.config.RAG_EMBEDDING_ENGINE == 'azure_openai'
+                else request.app.state.config.RAG_OPENAI_API_BASE_URL
             ),
             (
-                request.app.state.config.RAG_OPENAI_API_KEY
-                if request.app.state.config.RAG_EMBEDDING_ENGINE == 'openai'
-                else (
-                    request.app.state.config.RAG_OLLAMA_API_KEY
-                    if request.app.state.config.RAG_EMBEDDING_ENGINE == 'ollama'
-                    else request.app.state.config.RAG_AZURE_OPENAI_API_KEY
-                )
+                request.app.state.config.RAG_AZURE_OPENAI_API_KEY
+                if request.app.state.config.RAG_EMBEDDING_ENGINE == 'azure_openai'
+                else request.app.state.config.RAG_OPENAI_API_KEY
             ),
             request.app.state.config.RAG_EMBEDDING_BATCH_SIZE,
             azure_api_version=(
@@ -398,10 +310,6 @@ async def update_embedding_config(request: Request, form_data: EmbeddingModelUpd
             'openai_config': {
                 'url': request.app.state.config.RAG_OPENAI_API_BASE_URL,
                 'key': request.app.state.config.RAG_OPENAI_API_KEY,
-            },
-            'ollama_config': {
-                'url': request.app.state.config.RAG_OLLAMA_BASE_URL,
-                'key': request.app.state.config.RAG_OLLAMA_API_KEY,
             },
             'azure_openai_config': {
                 'url': request.app.state.config.RAG_AZURE_OPENAI_BASE_URL,
@@ -501,7 +409,6 @@ async def get_rag_config(request: Request, user=Depends(get_admin_user)):
             'WEB_SEARCH_DOMAIN_FILTER_LIST': request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             'BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL': request.app.state.config.BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL,
             'BYPASS_WEB_SEARCH_WEB_LOADER': request.app.state.config.BYPASS_WEB_SEARCH_WEB_LOADER,
-            'OLLAMA_CLOUD_WEB_SEARCH_API_KEY': request.app.state.config.OLLAMA_CLOUD_WEB_SEARCH_API_KEY,
             'SEARXNG_QUERY_URL': request.app.state.config.SEARXNG_QUERY_URL,
             'SEARXNG_LANGUAGE': request.app.state.config.SEARXNG_LANGUAGE,
             'YACY_QUERY_URL': request.app.state.config.YACY_QUERY_URL,
@@ -572,7 +479,6 @@ class WebConfig(BaseModel):
     WEB_LOADER_CONCURRENT_REQUESTS: int | None = None
     BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL: bool | None = None
     BYPASS_WEB_SEARCH_WEB_LOADER: bool | None = None
-    OLLAMA_CLOUD_WEB_SEARCH_API_KEY: str | None = None
     SEARXNG_QUERY_URL: str | None = None
     SEARXNG_LANGUAGE: str | None = None
     YACY_QUERY_URL: str | None = None
@@ -920,11 +826,6 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         import gc
 
         gc.collect()
-        if DEVICE_TYPE == 'cuda':
-            import torch
-
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
     request.app.state.config.RAG_RERANKING_ENGINE = (
         form_data.RAG_RERANKING_ENGINE
         if form_data.RAG_RERANKING_ENGINE is not None
@@ -1063,7 +964,6 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
             form_data.web.BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL
         )
         request.app.state.config.BYPASS_WEB_SEARCH_WEB_LOADER = form_data.web.BYPASS_WEB_SEARCH_WEB_LOADER
-        request.app.state.config.OLLAMA_CLOUD_WEB_SEARCH_API_KEY = form_data.web.OLLAMA_CLOUD_WEB_SEARCH_API_KEY
         request.app.state.config.SEARXNG_QUERY_URL = form_data.web.SEARXNG_QUERY_URL
         request.app.state.config.SEARXNG_LANGUAGE = form_data.web.SEARXNG_LANGUAGE
         request.app.state.config.YACY_QUERY_URL = form_data.web.YACY_QUERY_URL
@@ -1202,7 +1102,6 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
             'WEB_SEARCH_DOMAIN_FILTER_LIST': request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
             'BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL': request.app.state.config.BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL,
             'BYPASS_WEB_SEARCH_WEB_LOADER': request.app.state.config.BYPASS_WEB_SEARCH_WEB_LOADER,
-            'OLLAMA_CLOUD_WEB_SEARCH_API_KEY': request.app.state.config.OLLAMA_CLOUD_WEB_SEARCH_API_KEY,
             'SEARXNG_QUERY_URL': request.app.state.config.SEARXNG_QUERY_URL,
             'SEARXNG_LANGUAGE': request.app.state.config.SEARXNG_LANGUAGE,
             'YACY_QUERY_URL': request.app.state.config.YACY_QUERY_URL,
@@ -1493,22 +1392,14 @@ def save_docs_to_vector_db(
             request.app.state.config.RAG_EMBEDDING_MODEL,
             request.app.state.ef,
             (
-                request.app.state.config.RAG_OPENAI_API_BASE_URL
-                if request.app.state.config.RAG_EMBEDDING_ENGINE == 'openai'
-                else (
-                    request.app.state.config.RAG_OLLAMA_BASE_URL
-                    if request.app.state.config.RAG_EMBEDDING_ENGINE == 'ollama'
-                    else request.app.state.config.RAG_AZURE_OPENAI_BASE_URL
-                )
+                request.app.state.config.RAG_AZURE_OPENAI_BASE_URL
+                if request.app.state.config.RAG_EMBEDDING_ENGINE == 'azure_openai'
+                else request.app.state.config.RAG_OPENAI_API_BASE_URL
             ),
             (
-                request.app.state.config.RAG_OPENAI_API_KEY
-                if request.app.state.config.RAG_EMBEDDING_ENGINE == 'openai'
-                else (
-                    request.app.state.config.RAG_OLLAMA_API_KEY
-                    if request.app.state.config.RAG_EMBEDDING_ENGINE == 'ollama'
-                    else request.app.state.config.RAG_AZURE_OPENAI_API_KEY
-                )
+                request.app.state.config.RAG_AZURE_OPENAI_API_KEY
+                if request.app.state.config.RAG_EMBEDDING_ENGINE == 'azure_openai'
+                else request.app.state.config.RAG_OPENAI_API_KEY
             ),
             request.app.state.config.RAG_EMBEDDING_BATCH_SIZE,
             azure_api_version=(
@@ -1907,16 +1798,7 @@ async def search_web(
     )
 
     # TODO: add playwright to search the web
-    if engine == 'ollama_cloud':
-        return await asyncio.to_thread(
-            search_ollama_cloud,
-            'https://ollama.com',
-            request.app.state.config.OLLAMA_CLOUD_WEB_SEARCH_API_KEY,
-            query,
-            result_count,
-            request.app.state.config.WEB_SEARCH_DOMAIN_FILTER_LIST,
-        )
-    elif engine == 'perplexity_search':
+    if engine == 'perplexity_search':
         if request.app.state.config.PERPLEXITY_API_KEY:
             return await asyncio.to_thread(
                 search_perplexity_search,

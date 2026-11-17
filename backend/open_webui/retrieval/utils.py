@@ -12,7 +12,6 @@ from urllib.parse import quote
 
 import aiohttp
 import requests
-from huggingface_hub import snapshot_download
 from langchain_classic.retrievers import (
     ContextualCompressionRetriever,
     EnsembleRetriever,
@@ -839,82 +838,6 @@ async def agenerate_azure_openai_batch_embeddings(
                 raise ValueError("Unexpected Azure OpenAI embeddings response: missing 'data' key")
 
 
-def generate_ollama_batch_embeddings(
-    model: str,
-    texts: list[str],
-    url: str,
-    key: str = '',
-    prefix: str = None,
-    user: UserModel = None,
-) -> list[list[float]]:
-    log.debug(f'generate_ollama_batch_embeddings:model {model} batch size: {len(texts)}')
-    json_data = {'input': texts, 'model': model, 'truncate': True}
-    if isinstance(RAG_EMBEDDING_PREFIX_FIELD_NAME, str) and isinstance(prefix, str):
-        json_data[RAG_EMBEDDING_PREFIX_FIELD_NAME] = prefix
-
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {key}',
-    }
-    if ENABLE_FORWARD_USER_INFO_HEADERS and user:
-        headers = include_user_info_headers(headers, user)
-
-    r = requests.post(
-        f'{url}/api/embed',
-        headers=headers,
-        json=json_data,
-    )
-    if r.status_code != 200:
-        error_detail = r.json().get('error', r.text)
-        raise Exception(f'Ollama embed error ({r.status_code}): {error_detail}')
-    data = r.json()
-
-    if 'embeddings' in data:
-        return data['embeddings']
-    else:
-        raise ValueError("Unexpected Ollama embeddings response: missing 'embeddings' key")
-
-
-async def agenerate_ollama_batch_embeddings(
-    model: str,
-    texts: list[str],
-    url: str,
-    key: str = '',
-    prefix: str = None,
-    user: UserModel = None,
-) -> list[list[float]]:
-    log.debug(f'agenerate_ollama_batch_embeddings:model {model} batch size: {len(texts)}')
-    form_data = {'input': texts, 'model': model, 'truncate': True}
-    if isinstance(RAG_EMBEDDING_PREFIX_FIELD_NAME, str) and isinstance(prefix, str):
-        form_data[RAG_EMBEDDING_PREFIX_FIELD_NAME] = prefix
-
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {key}',
-    }
-    if ENABLE_FORWARD_USER_INFO_HEADERS and user:
-        headers = include_user_info_headers(headers, user)
-
-    async with aiohttp.ClientSession(
-        trust_env=True, timeout=aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT)
-    ) as session:
-        async with session.post(
-            f'{url}/api/embed',
-            headers=headers,
-            json=form_data,
-            ssl=AIOHTTP_CLIENT_SESSION_SSL,
-        ) as r:
-            if r.status != 200:
-                error_data = await r.json()
-                error_detail = error_data.get('error', str(error_data))
-                raise Exception(f'Ollama embed error ({r.status}): {error_detail}')
-            data = await r.json()
-            if 'embeddings' in data:
-                return data['embeddings']
-            else:
-                raise ValueError("Unexpected Ollama embeddings response: missing 'embeddings' key")
-
-
 def get_embedding_function(
     embedding_engine,
     embedding_model,
@@ -927,29 +850,19 @@ def get_embedding_function(
     concurrent_requests=0,
 ) -> Awaitable:
     if embedding_engine == '':
-        if embedding_function is None:
+        # Local embedding models are not available in this deployment. The error
+        # is raised when the function is used, not on startup - the rest of the
+        # app (chat, models, images) works without an embedding provider.
+        async def missing_embedding_function(query, prefix=None, user=None):
             raise ValueError(
-                'No embedding model is loaded. Set RAG_EMBEDDING_MODEL to a valid '
-                'SentenceTransformer model name, or configure an external '
-                'RAG_EMBEDDING_ENGINE (ollama, openai, azure_openai).'
+                'No embedding provider configured. Set RAG_EMBEDDING_ENGINE to "openai" '
+                'and provide RAG_OPENAI_API_BASE_URL, RAG_OPENAI_API_KEY and '
+                'RAG_EMBEDDING_MODEL. Local embedding models are not available in this '
+                'deployment (no torch/sentence-transformers runtime).'
             )
 
-        # Sentence transformers: CPU-bound sync operation
-        async def async_embedding_function(query, prefix=None, user=None):
-            return await asyncio.to_thread(
-                (
-                    lambda query, prefix=None: embedding_function.encode(
-                        query,
-                        batch_size=int(embedding_batch_size),
-                        **({'prompt': prefix} if prefix else {}),
-                    ).tolist()
-                ),
-                query,
-                prefix,
-            )
-
-        return async_embedding_function
-    elif embedding_engine in ['ollama', 'openai', 'azure_openai']:
+        return missing_embedding_function
+    elif embedding_engine in ['openai', 'azure_openai']:
         embedding_function = lambda query, prefix=None, user=None: generate_embeddings(
             engine=embedding_engine,
             model=embedding_model,
@@ -1023,21 +936,7 @@ async def generate_embeddings(
         else:
             text = f'{prefix}{text}'
 
-    if engine == 'ollama':
-        embeddings = await agenerate_ollama_batch_embeddings(
-            **{
-                'model': model,
-                'texts': text if isinstance(text, list) else [text],
-                'url': url,
-                'key': key,
-                'prefix': prefix,
-                'user': user,
-            }
-        )
-        if embeddings is None:
-            return None
-        return embeddings[0] if isinstance(text, str) else embeddings
-    elif engine == 'openai':
+    if engine == 'openai':
         embeddings = await agenerate_openai_batch_embeddings(
             model, text if isinstance(text, list) else [text], url, key, prefix, user
         )
@@ -1447,45 +1346,6 @@ async def get_sources_from_items(
     return sources
 
 
-def get_model_path(model: str, update_model: bool = False):
-    # Construct huggingface_hub kwargs with local_files_only to return the snapshot path
-    cache_dir = os.getenv('SENTENCE_TRANSFORMERS_HOME')
-
-    local_files_only = not update_model
-
-    if OFFLINE_MODE:
-        local_files_only = True
-
-    snapshot_kwargs = {
-        'cache_dir': cache_dir,
-        'local_files_only': local_files_only,
-    }
-
-    log.debug(f'model: {model}')
-    log.debug(f'snapshot_kwargs: {snapshot_kwargs}')
-
-    # Inspiration from upstream sentence_transformers
-    if os.path.exists(model) or ('\\' in model or model.count('/') > 1) and local_files_only:
-        # If fully qualified path exists, return input, else set repo_id
-        return model
-    elif '/' not in model:
-        # Set valid repo_id for model short-name
-        model = 'sentence-transformers' + '/' + model
-
-    snapshot_kwargs['repo_id'] = model
-
-    # Attempt to query the huggingface_hub library to determine the local path and/or to update
-    try:
-        model_repo_path = snapshot_download(**snapshot_kwargs)
-        log.debug(f'model_repo_path: {model_repo_path}')
-        return model_repo_path
-    except Exception as e:
-        log.exception(f'Cannot determine model snapshot path: {e}')
-        if OFFLINE_MODE:
-            raise
-        return model
-
-
 import operator
 from typing import Optional, Sequence
 
@@ -1534,12 +1394,25 @@ class RerankCompressor(BaseDocumentCompressor):
         if reranking:
             scores = await asyncio.to_thread(self.reranking_function, query, documents)
         else:
-            from sentence_transformers import util as st_util
+            import numpy as np
 
             query_embedding = await self.embedding_function(query, RAG_EMBEDDING_QUERY_PREFIX)
             doc_texts = [doc.page_content for doc in documents]
             document_embedding = await self.embedding_function(doc_texts, RAG_EMBEDDING_CONTENT_PREFIX)
-            scores = st_util.cos_sim(query_embedding, document_embedding)[0]
+            # Cosine similarity between the query and every document.
+            query_vec = np.asarray(query_embedding, dtype=float).reshape(-1)
+            doc_vecs = np.asarray(document_embedding, dtype=float)
+            if doc_vecs.ndim == 1:
+                doc_vecs = doc_vecs.reshape(1, -1)
+            q_norm = np.linalg.norm(query_vec)
+            d_norms = np.linalg.norm(doc_vecs, axis=1)
+            denom = d_norms * q_norm
+            scores = np.divide(
+                doc_vecs @ query_vec,
+                denom,
+                out=np.zeros_like(d_norms),
+                where=denom != 0,
+            )
 
         if scores is not None:
             docs_with_scores = list(

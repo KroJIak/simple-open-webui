@@ -192,7 +192,6 @@ from open_webui.config import (
     # WebUI (OAuth)
     ENABLE_OAUTH_ROLE_MANAGEMENT,
     # Ollama
-    ENABLE_OLLAMA_API,
     ENABLE_ONEDRIVE_BUSINESS,
     ENABLE_ONEDRIVE_INTEGRATION,
     ENABLE_ONEDRIVE_PERSONAL,
@@ -299,9 +298,6 @@ from open_webui.config import (
     OAUTH_ROLES_CLAIM,
     OAUTH_SUB_CLAIM,
     OAUTH_USERNAME_CLAIM,
-    OLLAMA_API_CONFIGS,
-    OLLAMA_BASE_URLS,
-    OLLAMA_CLOUD_WEB_SEARCH_API_KEY,
     ONEDRIVE_CLIENT_ID_BUSINESS,
     ONEDRIVE_CLIENT_ID_PERSONAL,
     ONEDRIVE_SHAREPOINT_TENANT_ID,
@@ -330,8 +326,6 @@ from open_webui.config import (
     RAG_EMBEDDING_CONCURRENT_REQUESTS,
     RAG_EMBEDDING_ENGINE,
     RAG_EMBEDDING_MODEL,
-    RAG_EMBEDDING_MODEL_AUTO_UPDATE,
-    RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE,
     RAG_EXTERNAL_RERANKER_API_KEY,
     RAG_EXTERNAL_RERANKER_TIMEOUT,
     RAG_EXTERNAL_RERANKER_URL,
@@ -339,16 +333,12 @@ from open_webui.config import (
     RAG_FILE_MAX_SIZE,
     RAG_FULL_CONTEXT,
     RAG_HYBRID_BM25_WEIGHT,
-    RAG_OLLAMA_API_KEY,
-    RAG_OLLAMA_BASE_URL,
     RAG_OPENAI_API_BASE_URL,
     RAG_OPENAI_API_KEY,
     RAG_RELEVANCE_THRESHOLD,
     RAG_RERANKING_BATCH_SIZE,
     RAG_RERANKING_ENGINE,
     RAG_RERANKING_MODEL,
-    RAG_RERANKING_MODEL_AUTO_UPDATE,
-    RAG_RERANKING_MODEL_TRUST_REMOTE_CODE,
     # Retrieval
     RAG_TEMPLATE,
     RAG_TEXT_SPLITTER,
@@ -405,9 +395,6 @@ from open_webui.config import (
     WEBUI_URL,
     WHISPER_LANGUAGE,
     WHISPER_MODEL,
-    WHISPER_MODEL_AUTO_UPDATE,
-    WHISPER_MODEL_DIR,
-    WHISPER_VAD_FILTER,
     YACY_PASSWORD,
     YACY_QUERY_URL,
     YACY_USERNAME,
@@ -499,7 +486,6 @@ from open_webui.routers import (
     memories,
     models,
     notes,
-    ollama,
     openai,
     pipelines,
     prompts,
@@ -823,16 +809,11 @@ if ENABLE_OTEL:
 
 ########################################
 #
-# OLLAMA
 #
 ########################################
 
 
-app.state.config.ENABLE_OLLAMA_API = ENABLE_OLLAMA_API
-app.state.config.OLLAMA_BASE_URLS = OLLAMA_BASE_URLS
-app.state.config.OLLAMA_API_CONFIGS = OLLAMA_API_CONFIGS
 
-app.state.OLLAMA_MODELS = {}
 
 ########################################
 #
@@ -1101,8 +1082,6 @@ app.state.config.RAG_AZURE_OPENAI_BASE_URL = RAG_AZURE_OPENAI_BASE_URL
 app.state.config.RAG_AZURE_OPENAI_API_KEY = RAG_AZURE_OPENAI_API_KEY
 app.state.config.RAG_AZURE_OPENAI_API_VERSION = RAG_AZURE_OPENAI_API_VERSION
 
-app.state.config.RAG_OLLAMA_BASE_URL = RAG_OLLAMA_BASE_URL
-app.state.config.RAG_OLLAMA_API_KEY = RAG_OLLAMA_API_KEY
 
 app.state.config.PDF_EXTRACT_IMAGES = PDF_EXTRACT_IMAGES
 app.state.config.PDF_LOADER_MODE = PDF_LOADER_MODE
@@ -1130,7 +1109,6 @@ app.state.config.BYPASS_WEB_SEARCH_WEB_LOADER = BYPASS_WEB_SEARCH_WEB_LOADER
 app.state.config.ENABLE_GOOGLE_DRIVE_INTEGRATION = ENABLE_GOOGLE_DRIVE_INTEGRATION
 app.state.config.ENABLE_ONEDRIVE_INTEGRATION = ENABLE_ONEDRIVE_INTEGRATION
 
-app.state.config.OLLAMA_CLOUD_WEB_SEARCH_API_KEY = OLLAMA_CLOUD_WEB_SEARCH_API_KEY
 app.state.config.SEARXNG_QUERY_URL = SEARXNG_QUERY_URL
 app.state.config.SEARXNG_LANGUAGE = SEARXNG_LANGUAGE
 app.state.config.YACY_QUERY_URL = YACY_QUERY_URL
@@ -1213,22 +1191,14 @@ app.state.EMBEDDING_FUNCTION = get_embedding_function(
     app.state.config.RAG_EMBEDDING_MODEL,
     embedding_function=app.state.ef,
     url=(
-        app.state.config.RAG_OPENAI_API_BASE_URL
-        if app.state.config.RAG_EMBEDDING_ENGINE == 'openai'
-        else (
-            app.state.config.RAG_OLLAMA_BASE_URL
-            if app.state.config.RAG_EMBEDDING_ENGINE == 'ollama'
-            else app.state.config.RAG_AZURE_OPENAI_BASE_URL
-        )
+        app.state.config.RAG_AZURE_OPENAI_BASE_URL
+        if app.state.config.RAG_EMBEDDING_ENGINE == 'azure_openai'
+        else app.state.config.RAG_OPENAI_API_BASE_URL
     ),
     key=(
-        app.state.config.RAG_OPENAI_API_KEY
-        if app.state.config.RAG_EMBEDDING_ENGINE == 'openai'
-        else (
-            app.state.config.RAG_OLLAMA_API_KEY
-            if app.state.config.RAG_EMBEDDING_ENGINE == 'ollama'
-            else app.state.config.RAG_AZURE_OPENAI_API_KEY
-        )
+        app.state.config.RAG_AZURE_OPENAI_API_KEY
+        if app.state.config.RAG_EMBEDDING_ENGINE == 'azure_openai'
+        else app.state.config.RAG_OPENAI_API_KEY
     ),
     embedding_batch_size=app.state.config.RAG_EMBEDDING_BATCH_SIZE,
     azure_api_version=(
@@ -1368,11 +1338,6 @@ app.state.config.TTS_MISTRAL_API_KEY = AUDIO_TTS_MISTRAL_API_KEY
 app.state.config.TTS_MISTRAL_API_BASE_URL = AUDIO_TTS_MISTRAL_API_BASE_URL
 
 
-app.state.faster_whisper_model = None
-app.state.speech_synthesiser = None
-app.state.speech_speaker_embeddings_dataset = None
-
-
 ########################################
 #
 # TASKS
@@ -1445,7 +1410,6 @@ app.add_middleware(
 app.mount('/ws', socket_app)
 
 
-app.include_router(ollama.router, prefix='/ollama', tags=['ollama'])
 app.include_router(openai.router, prefix='/openai', tags=['openai'])
 
 
@@ -1575,54 +1539,9 @@ async def unload_model(request: Request, form_data: ModelUnloadForm, user=Depend
     """
     Unified model unload endpoint.
     Resolves the provider that owns the model and calls its native unload mechanism.
-    Supports: Ollama (keep_alive=0) and llama.cpp (/models/unload).
+    Supports: llama.cpp (/models/unload).
     """
     model_id = form_data.model
-
-    # --- Ollama provider ---
-    ollama_models = getattr(request.app.state, 'OLLAMA_MODELS', None) or {}
-    if model_id in ollama_models:
-        url_indices = ollama_models[model_id].get('urls', [])
-        errors = []
-        for idx in url_indices:
-            url = request.app.state.config.OLLAMA_BASE_URLS[idx]
-            api_config = request.app.state.config.OLLAMA_API_CONFIGS.get(
-                str(idx),
-                request.app.state.config.OLLAMA_API_CONFIGS.get(url, {}),
-            )
-            key = api_config.get('key', None)
-
-            prefix_id = api_config.get('prefix_id', None)
-            actual_model = model_id
-            if prefix_id and actual_model.startswith(f'{prefix_id}.'):
-                actual_model = actual_model[len(f'{prefix_id}.') :]
-
-            payload = json.dumps({'model': actual_model, 'keep_alive': 0, 'prompt': ''})
-
-            try:
-                timeout = aiohttp.ClientTimeout(total=30)
-                async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
-                    headers = {
-                        'Content-Type': 'application/json',
-                        **({'Authorization': f'Bearer {key}'} if key else {}),
-                    }
-                    async with session.post(
-                        f'{url}/api/generate',
-                        data=payload,
-                        headers=headers,
-                    ) as r:
-                        if not r.ok:
-                            errors.append({'url_idx': idx, 'error': await r.text()})
-            except Exception as e:
-                log.exception(f'Failed to unload model on Ollama node {idx}: {e}')
-                errors.append({'url_idx': idx, 'error': str(e)})
-
-        if errors:
-            raise HTTPException(
-                status_code=500,
-                detail=f'Failed to unload model on {len(errors)} node(s): {errors}',
-            )
-        return {'status': True}
 
     # --- OpenAI-compatible providers ---
     openai_models = getattr(request.app.state, 'OPENAI_MODELS', None) or {}
