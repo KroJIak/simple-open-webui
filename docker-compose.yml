@@ -153,8 +153,6 @@ services:
       - 'USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS=${USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS}'
       - 'USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS=${USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS}'
       - 'WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}'
-    extra_hosts:
-      - host.docker.internal:host-gateway
     restart: unless-stopped
     logging:
       driver: json-file

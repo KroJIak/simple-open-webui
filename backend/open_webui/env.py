@@ -39,7 +39,21 @@ try:
 except ImportError:
     print('dotenv not installed, skipping...')
 
-DOCKER = os.getenv('DOCKER', 'False').lower() == 'true'
+def get_env(name: str, default: str = '') -> str:
+    """Read an environment variable, treating an empty value as "not set".
+
+    A variable that is present but empty (a common result of a compose file
+    referencing a variable that is missing from .env) must fall back to the
+    default instead of being used as an empty string - int('') would crash
+    the application on startup.
+    """
+    value = os.getenv(name)
+    if value is None or value.strip() == '':
+        return default
+    return value
+
+
+DOCKER = get_env('DOCKER', 'False').lower() == 'true'
 
 # No local ML runtime in this deployment: embeddings and reranking are done
 # through an OpenAI-compatible API, so torch is not installed at all.
@@ -80,9 +94,9 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_entry, ensure_ascii=False, default=str)
 
 
-LOG_FORMAT = os.getenv('LOG_FORMAT', '').lower()
+LOG_FORMAT = get_env('LOG_FORMAT', '').lower()
 
-GLOBAL_LOG_LEVEL = os.getenv('GLOBAL_LOG_LEVEL', '').upper()
+GLOBAL_LOG_LEVEL = get_env('GLOBAL_LOG_LEVEL', '').upper()
 if GLOBAL_LOG_LEVEL in logging.getLevelNamesMapping():
     _log_cfg: dict[str, Any] = {'level': GLOBAL_LOG_LEVEL, 'force': True}
     if LOG_FORMAT == 'json':
@@ -104,9 +118,9 @@ SRC_LOG_LEVELS = {}  # Legacy variable, do not remove
 # ENV (dev,test,prod)
 ####################################
 
-ENV = os.getenv('ENV', 'dev')
+ENV = get_env('ENV', 'dev')
 
-FROM_INIT_PY = os.getenv('FROM_INIT_PY', 'False').lower() == 'true'
+FROM_INIT_PY = get_env('FROM_INIT_PY', 'False').lower() == 'true'
 
 if FROM_INIT_PY:
     PACKAGE_DATA = {'version': importlib.metadata.version('open-webui')}
@@ -119,10 +133,10 @@ else:
 VERSION = PACKAGE_DATA['version']
 
 
-DEPLOYMENT_ID = os.getenv('DEPLOYMENT_ID', '')
-INSTANCE_ID = os.getenv('INSTANCE_ID', str(uuid4()))
+DEPLOYMENT_ID = get_env('DEPLOYMENT_ID', '')
+INSTANCE_ID = get_env('INSTANCE_ID', str(uuid4()))
 
-ENABLE_DB_MIGRATIONS = os.getenv('ENABLE_DB_MIGRATIONS', 'True').lower() == 'true'
+ENABLE_DB_MIGRATIONS = get_env('ENABLE_DB_MIGRATIONS', 'True').lower() == 'true'
 
 
 # Function to parse each section
@@ -188,10 +202,10 @@ CHANGELOG = changelog_json
 # DATA/FRONTEND BUILD DIR
 ####################################
 
-DATA_DIR = Path(os.getenv('DATA_DIR', BACKEND_DIR / 'data')).resolve()
+DATA_DIR = Path(get_env('DATA_DIR', BACKEND_DIR / 'data')).resolve()
 
 if FROM_INIT_PY:
-    NEW_DATA_DIR = Path(os.getenv('DATA_DIR', OPEN_WEBUI_DIR / 'data')).resolve()
+    NEW_DATA_DIR = Path(get_env('DATA_DIR', OPEN_WEBUI_DIR / 'data')).resolve()
     NEW_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     # Check if the data directory exists in the package directory
@@ -210,16 +224,16 @@ if FROM_INIT_PY:
         # Remove the old data directory
         shutil.rmtree(DATA_DIR)
 
-    DATA_DIR = Path(os.getenv('DATA_DIR', OPEN_WEBUI_DIR / 'data'))
+    DATA_DIR = Path(get_env('DATA_DIR', OPEN_WEBUI_DIR / 'data'))
 
-STATIC_DIR = Path(os.getenv('STATIC_DIR', OPEN_WEBUI_DIR / 'static'))
+STATIC_DIR = Path(get_env('STATIC_DIR', OPEN_WEBUI_DIR / 'static'))
 
-FONTS_DIR = Path(os.getenv('FONTS_DIR', OPEN_WEBUI_DIR / 'static' / 'fonts'))
+FONTS_DIR = Path(get_env('FONTS_DIR', OPEN_WEBUI_DIR / 'static' / 'fonts'))
 
-FRONTEND_BUILD_DIR = Path(os.getenv('FRONTEND_BUILD_DIR', BASE_DIR / 'build')).resolve()
+FRONTEND_BUILD_DIR = Path(get_env('FRONTEND_BUILD_DIR', BASE_DIR / 'build')).resolve()
 
 if FROM_INIT_PY:
-    FRONTEND_BUILD_DIR = Path(os.getenv('FRONTEND_BUILD_DIR', OPEN_WEBUI_DIR / 'frontend')).resolve()
+    FRONTEND_BUILD_DIR = Path(get_env('FRONTEND_BUILD_DIR', OPEN_WEBUI_DIR / 'frontend')).resolve()
 
 ####################################
 # Database
@@ -233,11 +247,11 @@ if os.path.exists(f'{DATA_DIR}/ollama.db'):
 else:
     pass
 
-DATABASE_URL = os.getenv('DATABASE_URL', f'sqlite:///{DATA_DIR}/webui.db')
+DATABASE_URL = get_env('DATABASE_URL', f'sqlite:///{DATA_DIR}/webui.db')
 
-DATABASE_TYPE = os.getenv('DATABASE_TYPE')
-DATABASE_USER = os.getenv('DATABASE_USER')
-DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD')
+DATABASE_TYPE = get_env('DATABASE_TYPE')
+DATABASE_USER = get_env('DATABASE_USER')
+DATABASE_PASSWORD = get_env('DATABASE_PASSWORD')
 
 DATABASE_CRED = ''
 if DATABASE_USER:
@@ -248,16 +262,16 @@ if DATABASE_PASSWORD:
 DB_VARS = {
     'db_type': DATABASE_TYPE,
     'db_cred': DATABASE_CRED,
-    'db_host': os.getenv('DATABASE_HOST'),
-    'db_port': os.getenv('DATABASE_PORT'),
-    'db_name': os.getenv('DATABASE_NAME'),
+    'db_host': get_env('DATABASE_HOST'),
+    'db_port': get_env('DATABASE_PORT'),
+    'db_name': get_env('DATABASE_NAME'),
 }
 
 if all(DB_VARS.values()):
     DATABASE_URL = (
         f'{DB_VARS["db_type"]}://{DB_VARS["db_cred"]}@{DB_VARS["db_host"]}:{DB_VARS["db_port"]}/{DB_VARS["db_name"]}'
     )
-elif DATABASE_TYPE == 'sqlite+sqlcipher' and not os.getenv('DATABASE_URL'):
+elif DATABASE_TYPE == 'sqlite+sqlcipher' and not get_env('DATABASE_URL'):
     # Handle SQLCipher with local file when DATABASE_URL wasn't explicitly set
     DATABASE_URL = f'sqlite+sqlcipher:///{DATA_DIR}/webui.db'
 
@@ -265,33 +279,33 @@ elif DATABASE_TYPE == 'sqlite+sqlcipher' and not os.getenv('DATABASE_URL'):
 if 'postgres://' in DATABASE_URL:
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://')
 
-DATABASE_SCHEMA = os.getenv('DATABASE_SCHEMA', None)
+DATABASE_SCHEMA = get_env('DATABASE_SCHEMA', None)
 
-_pool_size_raw = os.getenv('DATABASE_POOL_SIZE')
+_pool_size_raw = get_env('DATABASE_POOL_SIZE')
 try:
     DATABASE_POOL_SIZE = int(_pool_size_raw) if _pool_size_raw else None
 except (ValueError, TypeError):
     DATABASE_POOL_SIZE = None
 
-_pool_overflow_raw = os.getenv('DATABASE_POOL_MAX_OVERFLOW', '0')
+_pool_overflow_raw = get_env('DATABASE_POOL_MAX_OVERFLOW', '0')
 try:
     DATABASE_POOL_MAX_OVERFLOW = int(_pool_overflow_raw) if _pool_overflow_raw else 0
 except (ValueError, TypeError):
     DATABASE_POOL_MAX_OVERFLOW = 0
 
-_pool_timeout_raw = os.getenv('DATABASE_POOL_TIMEOUT', '30')
+_pool_timeout_raw = get_env('DATABASE_POOL_TIMEOUT', '30')
 try:
     DATABASE_POOL_TIMEOUT = int(_pool_timeout_raw) if _pool_timeout_raw else 30
 except (ValueError, TypeError):
     DATABASE_POOL_TIMEOUT = 30
 
-_pool_recycle_raw = os.getenv('DATABASE_POOL_RECYCLE', '3600')
+_pool_recycle_raw = get_env('DATABASE_POOL_RECYCLE', '3600')
 try:
     DATABASE_POOL_RECYCLE = int(_pool_recycle_raw) if _pool_recycle_raw else 3600
 except (ValueError, TypeError):
     DATABASE_POOL_RECYCLE = 3600
 
-DATABASE_ENABLE_SQLITE_WAL = os.getenv('DATABASE_ENABLE_SQLITE_WAL', 'True').lower() == 'true'
+DATABASE_ENABLE_SQLITE_WAL = get_env('DATABASE_ENABLE_SQLITE_WAL', 'True').lower() == 'true'
 
 # SQLite PRAGMA tuning — these defaults are optimised for WAL-mode web-server
 # workloads.  Each can be overridden via its environment variable.
@@ -299,56 +313,56 @@ DATABASE_ENABLE_SQLITE_WAL = os.getenv('DATABASE_ENABLE_SQLITE_WAL', 'True').low
 
 # PRAGMA synchronous: NORMAL (1) is safe with WAL and avoids an fsync per
 # transaction.  Valid values: OFF (0), NORMAL (1), FULL (2), EXTRA (3).
-DATABASE_SQLITE_PRAGMA_SYNCHRONOUS = os.getenv('DATABASE_SQLITE_PRAGMA_SYNCHRONOUS', 'NORMAL')
+DATABASE_SQLITE_PRAGMA_SYNCHRONOUS = get_env('DATABASE_SQLITE_PRAGMA_SYNCHRONOUS', 'NORMAL')
 
 # PRAGMA busy_timeout (ms): how long a connection waits for a write lock
 # before raising SQLITE_BUSY.
-DATABASE_SQLITE_PRAGMA_BUSY_TIMEOUT = os.getenv('DATABASE_SQLITE_PRAGMA_BUSY_TIMEOUT', '5000')
+DATABASE_SQLITE_PRAGMA_BUSY_TIMEOUT = get_env('DATABASE_SQLITE_PRAGMA_BUSY_TIMEOUT', '5000')
 
 # PRAGMA cache_size: negative value = KiB.  -65536 ≈ 64 MB page cache.
-DATABASE_SQLITE_PRAGMA_CACHE_SIZE = os.getenv('DATABASE_SQLITE_PRAGMA_CACHE_SIZE', '-65536')
+DATABASE_SQLITE_PRAGMA_CACHE_SIZE = get_env('DATABASE_SQLITE_PRAGMA_CACHE_SIZE', '-65536')
 
 # PRAGMA temp_store: MEMORY (2) keeps temp tables and indices in RAM.
 # Valid values: DEFAULT (0), FILE (1), MEMORY (2).
-DATABASE_SQLITE_PRAGMA_TEMP_STORE = os.getenv('DATABASE_SQLITE_PRAGMA_TEMP_STORE', 'MEMORY')
+DATABASE_SQLITE_PRAGMA_TEMP_STORE = get_env('DATABASE_SQLITE_PRAGMA_TEMP_STORE', 'MEMORY')
 
 # PRAGMA mmap_size (bytes): memory-mapped I/O size.  268435456 ≈ 256 MB.
 # Set to 0 to disable mmap.
-DATABASE_SQLITE_PRAGMA_MMAP_SIZE = os.getenv('DATABASE_SQLITE_PRAGMA_MMAP_SIZE', '268435456')
+DATABASE_SQLITE_PRAGMA_MMAP_SIZE = get_env('DATABASE_SQLITE_PRAGMA_MMAP_SIZE', '268435456')
 
 # PRAGMA journal_size_limit (bytes): caps the WAL file size after checkpoint.
 # Without this the WAL grows unbounded during write bursts and is never
 # truncated.  67108864 ≈ 64 MB.  Set to -1 for no limit (SQLite default).
-DATABASE_SQLITE_PRAGMA_JOURNAL_SIZE_LIMIT = os.getenv('DATABASE_SQLITE_PRAGMA_JOURNAL_SIZE_LIMIT', '67108864')
+DATABASE_SQLITE_PRAGMA_JOURNAL_SIZE_LIMIT = get_env('DATABASE_SQLITE_PRAGMA_JOURNAL_SIZE_LIMIT', '67108864')
 
-DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = os.getenv('DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL', None)
+DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = get_env('DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL', None)
 if DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL is not None:
     try:
         DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = float(DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL)
     except Exception:
         DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = 0.0
 
-DATABASE_ENABLE_SESSION_SHARING = os.getenv('DATABASE_ENABLE_SESSION_SHARING', 'False').lower() == 'true'
-ENABLE_PUBLIC_ACTIVE_USERS_COUNT = os.getenv('ENABLE_PUBLIC_ACTIVE_USERS_COUNT', 'True').lower() == 'true'
-RESET_CONFIG_ON_START = os.getenv('RESET_CONFIG_ON_START', 'False').lower() == 'true'
-ENABLE_REALTIME_CHAT_SAVE = os.getenv('ENABLE_REALTIME_CHAT_SAVE', 'False').lower() == 'true'
-ENABLE_QUERIES_CACHE = os.getenv('ENABLE_QUERIES_CACHE', 'False').lower() == 'true'
-RAG_SYSTEM_CONTEXT = os.getenv('RAG_SYSTEM_CONTEXT', 'False').lower() == 'true'
+DATABASE_ENABLE_SESSION_SHARING = get_env('DATABASE_ENABLE_SESSION_SHARING', 'False').lower() == 'true'
+ENABLE_PUBLIC_ACTIVE_USERS_COUNT = get_env('ENABLE_PUBLIC_ACTIVE_USERS_COUNT', 'True').lower() == 'true'
+RESET_CONFIG_ON_START = get_env('RESET_CONFIG_ON_START', 'False').lower() == 'true'
+ENABLE_REALTIME_CHAT_SAVE = get_env('ENABLE_REALTIME_CHAT_SAVE', 'False').lower() == 'true'
+ENABLE_QUERIES_CACHE = get_env('ENABLE_QUERIES_CACHE', 'False').lower() == 'true'
+RAG_SYSTEM_CONTEXT = get_env('RAG_SYSTEM_CONTEXT', 'False').lower() == 'true'
 
 ####################################
 # REDIS
 ####################################
 
-REDIS_URL = os.getenv('REDIS_URL', '')
-REDIS_CLUSTER = os.getenv('REDIS_CLUSTER', 'False').lower() == 'true'
+REDIS_URL = get_env('REDIS_URL', '')
+REDIS_CLUSTER = get_env('REDIS_CLUSTER', 'False').lower() == 'true'
 
-REDIS_KEY_PREFIX = os.getenv('REDIS_KEY_PREFIX', 'open-webui')
+REDIS_KEY_PREFIX = get_env('REDIS_KEY_PREFIX', 'open-webui')
 
-REDIS_SENTINEL_HOSTS = os.getenv('REDIS_SENTINEL_HOSTS', '')
-REDIS_SENTINEL_PORT = os.getenv('REDIS_SENTINEL_PORT', '26379')
+REDIS_SENTINEL_HOSTS = get_env('REDIS_SENTINEL_HOSTS', '')
+REDIS_SENTINEL_PORT = get_env('REDIS_SENTINEL_PORT', '26379')
 
 # Maximum number of retries for Redis operations when using Sentinel fail-over
-REDIS_SENTINEL_MAX_RETRY_COUNT = os.getenv('REDIS_SENTINEL_MAX_RETRY_COUNT', '2')
+REDIS_SENTINEL_MAX_RETRY_COUNT = get_env('REDIS_SENTINEL_MAX_RETRY_COUNT', '2')
 try:
     REDIS_SENTINEL_MAX_RETRY_COUNT = int(REDIS_SENTINEL_MAX_RETRY_COUNT)
     if REDIS_SENTINEL_MAX_RETRY_COUNT < 1:
@@ -357,7 +371,7 @@ except ValueError:
     REDIS_SENTINEL_MAX_RETRY_COUNT = 2
 
 
-REDIS_SOCKET_CONNECT_TIMEOUT = os.getenv('REDIS_SOCKET_CONNECT_TIMEOUT', '')
+REDIS_SOCKET_CONNECT_TIMEOUT = get_env('REDIS_SOCKET_CONNECT_TIMEOUT', '')
 try:
     REDIS_SOCKET_CONNECT_TIMEOUT = float(REDIS_SOCKET_CONNECT_TIMEOUT)
 except ValueError:
@@ -368,7 +382,7 @@ except ValueError:
 # enabled, the kernel sends TCP keepalive probes on idle connections so
 # half-closed sockets (e.g. after a silent firewall/LB reset or a NIC
 # flap) are detected before the next command lands on them.
-REDIS_SOCKET_KEEPALIVE = os.getenv('REDIS_SOCKET_KEEPALIVE', 'False').lower() == 'true'
+REDIS_SOCKET_KEEPALIVE = get_env('REDIS_SOCKET_KEEPALIVE', 'False').lower() == 'true'
 
 # How often (in seconds) redis-py should PING an idle pooled connection
 # before reusing it. Opt-in: defaults to unset (empty string) so behavior
@@ -376,7 +390,7 @@ REDIS_SOCKET_KEEPALIVE = os.getenv('REDIS_SOCKET_KEEPALIVE', 'False').lower() ==
 # the Redis server `timeout` setting and any firewall/LB idle timeout on
 # the path to Redis, so stale connections are detected before a real
 # command lands on them. Set to 0 or empty to disable.
-REDIS_HEALTH_CHECK_INTERVAL = os.getenv('REDIS_HEALTH_CHECK_INTERVAL', '')
+REDIS_HEALTH_CHECK_INTERVAL = get_env('REDIS_HEALTH_CHECK_INTERVAL', '')
 try:
     REDIS_HEALTH_CHECK_INTERVAL = int(REDIS_HEALTH_CHECK_INTERVAL)
     if REDIS_HEALTH_CHECK_INTERVAL <= 0:
@@ -384,7 +398,7 @@ try:
 except ValueError:
     REDIS_HEALTH_CHECK_INTERVAL = None
 
-REDIS_RECONNECT_DELAY = os.getenv('REDIS_RECONNECT_DELAY', '')
+REDIS_RECONNECT_DELAY = get_env('REDIS_RECONNECT_DELAY', '')
 
 if REDIS_RECONNECT_DELAY == '':
     REDIS_RECONNECT_DELAY = None
@@ -401,7 +415,7 @@ else:
 ####################################
 
 try:
-    UVICORN_WORKERS = max(int(os.getenv('UVICORN_WORKERS', '1')), 1)
+    UVICORN_WORKERS = max(int(get_env('UVICORN_WORKERS', '1')), 1)
 except (ValueError, TypeError):
     UVICORN_WORKERS = 1
 
@@ -409,12 +423,12 @@ except (ValueError, TypeError):
 # WEBSOCKET SUPPORT
 ####################################
 
-ENABLE_WEBSOCKET_SUPPORT = os.getenv('ENABLE_WEBSOCKET_SUPPORT', 'True').lower() == 'true'
+ENABLE_WEBSOCKET_SUPPORT = get_env('ENABLE_WEBSOCKET_SUPPORT', 'True').lower() == 'true'
 
 
-WEBSOCKET_MANAGER = os.getenv('WEBSOCKET_MANAGER', '')
+WEBSOCKET_MANAGER = get_env('WEBSOCKET_MANAGER', '')
 
-WEBSOCKET_REDIS_OPTIONS = os.getenv('WEBSOCKET_REDIS_OPTIONS', '')
+WEBSOCKET_REDIS_OPTIONS = get_env('WEBSOCKET_REDIS_OPTIONS', '')
 
 
 if WEBSOCKET_REDIS_OPTIONS == '':
@@ -430,39 +444,39 @@ else:
         log.warning('Invalid WEBSOCKET_REDIS_OPTIONS, defaulting to None')
         WEBSOCKET_REDIS_OPTIONS = None
 
-WEBSOCKET_REDIS_URL = os.getenv('WEBSOCKET_REDIS_URL', REDIS_URL)
-WEBSOCKET_REDIS_CLUSTER = os.getenv('WEBSOCKET_REDIS_CLUSTER', str(REDIS_CLUSTER)).lower() == 'true'
+WEBSOCKET_REDIS_URL = get_env('WEBSOCKET_REDIS_URL', REDIS_URL)
+WEBSOCKET_REDIS_CLUSTER = get_env('WEBSOCKET_REDIS_CLUSTER', str(REDIS_CLUSTER)).lower() == 'true'
 
-websocket_redis_lock_timeout = os.getenv('WEBSOCKET_REDIS_LOCK_TIMEOUT', '60')
+websocket_redis_lock_timeout = get_env('WEBSOCKET_REDIS_LOCK_TIMEOUT', '60')
 
 try:
     WEBSOCKET_REDIS_LOCK_TIMEOUT = int(websocket_redis_lock_timeout)
 except ValueError:
     WEBSOCKET_REDIS_LOCK_TIMEOUT = 60
 
-WEBSOCKET_SENTINEL_HOSTS = os.getenv('WEBSOCKET_SENTINEL_HOSTS', '')
-WEBSOCKET_SENTINEL_PORT = os.getenv('WEBSOCKET_SENTINEL_PORT', '26379')
-WEBSOCKET_SERVER_LOGGING = os.getenv('WEBSOCKET_SERVER_LOGGING', 'False').lower() == 'true'
+WEBSOCKET_SENTINEL_HOSTS = get_env('WEBSOCKET_SENTINEL_HOSTS', '')
+WEBSOCKET_SENTINEL_PORT = get_env('WEBSOCKET_SENTINEL_PORT', '26379')
+WEBSOCKET_SERVER_LOGGING = get_env('WEBSOCKET_SERVER_LOGGING', 'False').lower() == 'true'
 WEBSOCKET_SERVER_ENGINEIO_LOGGING = (
-    os.getenv(
+    get_env(
         'WEBSOCKET_SERVER_ENGINEIO_LOGGING',
-        os.getenv('WEBSOCKET_SERVER_LOGGING', 'False'),
+        get_env('WEBSOCKET_SERVER_LOGGING', 'False'),
     ).lower()
     == 'true'
 )
-WEBSOCKET_SERVER_PING_TIMEOUT = os.getenv('WEBSOCKET_SERVER_PING_TIMEOUT', '20')
+WEBSOCKET_SERVER_PING_TIMEOUT = get_env('WEBSOCKET_SERVER_PING_TIMEOUT', '20')
 try:
     WEBSOCKET_SERVER_PING_TIMEOUT = int(WEBSOCKET_SERVER_PING_TIMEOUT)
 except ValueError:
     WEBSOCKET_SERVER_PING_TIMEOUT = 20
 
-WEBSOCKET_SERVER_PING_INTERVAL = os.getenv('WEBSOCKET_SERVER_PING_INTERVAL', '25')
+WEBSOCKET_SERVER_PING_INTERVAL = get_env('WEBSOCKET_SERVER_PING_INTERVAL', '25')
 try:
     WEBSOCKET_SERVER_PING_INTERVAL = int(WEBSOCKET_SERVER_PING_INTERVAL)
 except ValueError:
     WEBSOCKET_SERVER_PING_INTERVAL = 25
 
-WEBSOCKET_EVENT_CALLER_TIMEOUT = os.getenv('WEBSOCKET_EVENT_CALLER_TIMEOUT', '')
+WEBSOCKET_EVENT_CALLER_TIMEOUT = get_env('WEBSOCKET_EVENT_CALLER_TIMEOUT', '')
 
 if WEBSOCKET_EVENT_CALLER_TIMEOUT == '':
     WEBSOCKET_EVENT_CALLER_TIMEOUT = None
@@ -473,21 +487,21 @@ else:
         WEBSOCKET_EVENT_CALLER_TIMEOUT = 300
 
 
-REQUESTS_VERIFY = os.getenv('REQUESTS_VERIFY', 'True').lower() == 'true'
+REQUESTS_VERIFY = get_env('REQUESTS_VERIFY', 'True').lower() == 'true'
 
-_aiohttp_timeout_raw = os.getenv('AIOHTTP_CLIENT_TIMEOUT', '')
+_aiohttp_timeout_raw = get_env('AIOHTTP_CLIENT_TIMEOUT', '')
 try:
     AIOHTTP_CLIENT_TIMEOUT = int(_aiohttp_timeout_raw) if _aiohttp_timeout_raw else None
 except (ValueError, TypeError):
     AIOHTTP_CLIENT_TIMEOUT = 300
 
-_aiohttp_read_bufsize_raw = os.getenv('AIOHTTP_CLIENT_READ_BUFSIZE', '')
+_aiohttp_read_bufsize_raw = get_env('AIOHTTP_CLIENT_READ_BUFSIZE', '')
 try:
     AIOHTTP_CLIENT_READ_BUFSIZE = int(_aiohttp_read_bufsize_raw) if _aiohttp_read_bufsize_raw else 8 * 1024 * 1024
 except (ValueError, TypeError):
     AIOHTTP_CLIENT_READ_BUFSIZE = 8 * 1024 * 1024
 
-_aiohttp_max_line_size_raw = os.getenv('AIOHTTP_CLIENT_MAX_LINE_SIZE', '')
+_aiohttp_max_line_size_raw = get_env('AIOHTTP_CLIENT_MAX_LINE_SIZE', '')
 try:
     AIOHTTP_CLIENT_MAX_LINE_SIZE = (
         int(_aiohttp_max_line_size_raw) if _aiohttp_max_line_size_raw else 16 * 1024 * 1024
@@ -495,7 +509,7 @@ try:
 except (ValueError, TypeError):
     AIOHTTP_CLIENT_MAX_LINE_SIZE = 16 * 1024 * 1024
 
-_aiohttp_max_field_size_raw = os.getenv('AIOHTTP_CLIENT_MAX_FIELD_SIZE', '')
+_aiohttp_max_field_size_raw = get_env('AIOHTTP_CLIENT_MAX_FIELD_SIZE', '')
 try:
     AIOHTTP_CLIENT_MAX_FIELD_SIZE = (
         int(_aiohttp_max_field_size_raw) if _aiohttp_max_field_size_raw else 64 * 1024
@@ -504,35 +518,35 @@ except (ValueError, TypeError):
     AIOHTTP_CLIENT_MAX_FIELD_SIZE = 64 * 1024
 
 
-AIOHTTP_CLIENT_SESSION_SSL = os.getenv('AIOHTTP_CLIENT_SESSION_SSL', 'True').lower() == 'true'
+AIOHTTP_CLIENT_SESSION_SSL = get_env('AIOHTTP_CLIENT_SESSION_SSL', 'True').lower() == 'true'
 
 # When False (default), outbound HTTP requests do not follow 3xx redirects.
-AIOHTTP_CLIENT_ALLOW_REDIRECTS = os.getenv('AIOHTTP_CLIENT_ALLOW_REDIRECTS', 'False').lower() == 'true'
+AIOHTTP_CLIENT_ALLOW_REDIRECTS = get_env('AIOHTTP_CLIENT_ALLOW_REDIRECTS', 'False').lower() == 'true'
 
 # Optional User-Agent override for outbound web-loader fetches.  When set,
 # SafeWebBaseLoader sends this value instead of the default python-requests UA
 # which is aggressively blocked by Cloudflare, Wikipedia, and similar services.
-USER_AGENT = os.getenv('USER_AGENT', '')
+USER_AGENT = get_env('USER_AGENT', '')
 
-_model_list_timeout_raw = os.getenv(
+_model_list_timeout_raw = get_env(
     'AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST',
-    os.getenv('AIOHTTP_CLIENT_TIMEOUT_OPENAI_MODEL_LIST', '10'),
+    get_env('AIOHTTP_CLIENT_TIMEOUT_OPENAI_MODEL_LIST', '10'),
 )
 try:
     AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST = int(_model_list_timeout_raw) if _model_list_timeout_raw else None
 except (ValueError, TypeError):
     AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST = 10
 
-_tool_data_timeout_raw = os.getenv('AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA', '10')
+_tool_data_timeout_raw = get_env('AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA', '10')
 try:
     AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA = int(_tool_data_timeout_raw) if _tool_data_timeout_raw else None
 except (ValueError, TypeError):
     AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA = 10
 
 
-AIOHTTP_CLIENT_SESSION_TOOL_SERVER_SSL = os.getenv('AIOHTTP_CLIENT_SESSION_TOOL_SERVER_SSL', 'True').lower() == 'true'
+AIOHTTP_CLIENT_SESSION_TOOL_SERVER_SSL = get_env('AIOHTTP_CLIENT_SESSION_TOOL_SERVER_SSL', 'True').lower() == 'true'
 
-AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER = os.getenv('AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER', '')
+AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER = get_env('AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER', '')
 
 if AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER == '':
     AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER = AIOHTTP_CLIENT_TIMEOUT
@@ -545,7 +559,7 @@ else:
 # Timeout (in seconds) for the MCP session.initialize() handshake.
 # The handshake performs a list-tools round-trip and can take tens of
 # seconds on cold-start servers or servers exposing many tools.
-MCP_INITIALIZE_TIMEOUT = os.getenv('MCP_INITIALIZE_TIMEOUT', '10')
+MCP_INITIALIZE_TIMEOUT = get_env('MCP_INITIALIZE_TIMEOUT', '10')
 try:
     MCP_INITIALIZE_TIMEOUT = int(MCP_INITIALIZE_TIMEOUT)
 except (ValueError, TypeError):
@@ -556,7 +570,7 @@ except (ValueError, TypeError):
 # AIOHTTP Connection Pool
 ####################################
 
-AIOHTTP_POOL_CONNECTIONS = os.getenv('AIOHTTP_POOL_CONNECTIONS', '')
+AIOHTTP_POOL_CONNECTIONS = get_env('AIOHTTP_POOL_CONNECTIONS', '')
 if AIOHTTP_POOL_CONNECTIONS == '':
     AIOHTTP_POOL_CONNECTIONS = None
 else:
@@ -565,7 +579,7 @@ else:
     except ValueError:
         AIOHTTP_POOL_CONNECTIONS = None
 
-AIOHTTP_POOL_CONNECTIONS_PER_HOST = os.getenv('AIOHTTP_POOL_CONNECTIONS_PER_HOST', '')
+AIOHTTP_POOL_CONNECTIONS_PER_HOST = get_env('AIOHTTP_POOL_CONNECTIONS_PER_HOST', '')
 if AIOHTTP_POOL_CONNECTIONS_PER_HOST == '':
     AIOHTTP_POOL_CONNECTIONS_PER_HOST = None
 else:
@@ -574,7 +588,7 @@ else:
     except ValueError:
         AIOHTTP_POOL_CONNECTIONS_PER_HOST = None
 
-AIOHTTP_POOL_DNS_TTL = os.getenv('AIOHTTP_POOL_DNS_TTL', '300')
+AIOHTTP_POOL_DNS_TTL = get_env('AIOHTTP_POOL_DNS_TTL', '300')
 try:
     AIOHTTP_POOL_DNS_TTL = int(AIOHTTP_POOL_DNS_TTL)
     if AIOHTTP_POOL_DNS_TTL < 0:
@@ -582,7 +596,7 @@ try:
 except ValueError:
     AIOHTTP_POOL_DNS_TTL = 300
 
-RAG_EMBEDDING_TIMEOUT = os.getenv('RAG_EMBEDDING_TIMEOUT', '')
+RAG_EMBEDDING_TIMEOUT = get_env('RAG_EMBEDDING_TIMEOUT', '')
 
 if RAG_EMBEDDING_TIMEOUT == '':
     RAG_EMBEDDING_TIMEOUT = None
@@ -597,10 +611,10 @@ else:
 # Auth
 ####################################
 
-WEBUI_AUTH = os.getenv('WEBUI_AUTH', 'True').lower() == 'true'
+WEBUI_AUTH = get_env('WEBUI_AUTH', 'True').lower() == 'true'
 
-ENABLE_INITIAL_ADMIN_SIGNUP = os.getenv('ENABLE_INITIAL_ADMIN_SIGNUP', 'False').lower() == 'true'
-ENABLE_SIGNUP_PASSWORD_CONFIRMATION = os.getenv('ENABLE_SIGNUP_PASSWORD_CONFIRMATION', 'False').lower() == 'true'
+ENABLE_INITIAL_ADMIN_SIGNUP = get_env('ENABLE_INITIAL_ADMIN_SIGNUP', 'False').lower() == 'true'
+ENABLE_SIGNUP_PASSWORD_CONFIRMATION = get_env('ENABLE_SIGNUP_PASSWORD_CONFIRMATION', 'False').lower() == 'true'
 
 ####################################
 # Secret key & cookies
@@ -608,18 +622,18 @@ ENABLE_SIGNUP_PASSWORD_CONFIRMATION = os.getenv('ENABLE_SIGNUP_PASSWORD_CONFIRMA
 
 # WEBUI_JWT_SECRET_KEY is deprecated; use WEBUI_SECRET_KEY instead.
 # No hardcoded fallback by design: the supported start scripts set/auto-generate it; unset is rejected below.
-WEBUI_SECRET_KEY = os.getenv(
+WEBUI_SECRET_KEY = get_env(
     'WEBUI_SECRET_KEY',
-    os.getenv('WEBUI_JWT_SECRET_KEY', ''),
+    get_env('WEBUI_JWT_SECRET_KEY', ''),
 )
 
-WEBUI_SESSION_COOKIE_SAME_SITE = os.getenv('WEBUI_SESSION_COOKIE_SAME_SITE', 'lax')
-WEBUI_SESSION_COOKIE_SECURE = os.getenv('WEBUI_SESSION_COOKIE_SECURE', 'false').lower() == 'true'
-WEBUI_AUTH_COOKIE_SAME_SITE = os.getenv('WEBUI_AUTH_COOKIE_SAME_SITE', WEBUI_SESSION_COOKIE_SAME_SITE)
+WEBUI_SESSION_COOKIE_SAME_SITE = get_env('WEBUI_SESSION_COOKIE_SAME_SITE', 'lax')
+WEBUI_SESSION_COOKIE_SECURE = get_env('WEBUI_SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+WEBUI_AUTH_COOKIE_SAME_SITE = get_env('WEBUI_AUTH_COOKIE_SAME_SITE', WEBUI_SESSION_COOKIE_SAME_SITE)
 WEBUI_AUTH_COOKIE_SECURE = (
-    os.getenv(
+    get_env(
         'WEBUI_AUTH_COOKIE_SECURE',
-        os.getenv('WEBUI_SESSION_COOKIE_SECURE', 'false'),
+        get_env('WEBUI_SESSION_COOKIE_SECURE', 'false'),
     ).lower()
     == 'true'
 )
@@ -634,7 +648,7 @@ if WEBUI_AUTH and WEBUI_SECRET_KEY == '':
         'See https://docs.openwebui.com/reference/env-configuration#webui_secret_key'
     )
 
-ENABLE_COMPRESSION_MIDDLEWARE = os.getenv('ENABLE_COMPRESSION_MIDDLEWARE', 'True').lower() == 'true'
+ENABLE_COMPRESSION_MIDDLEWARE = get_env('ENABLE_COMPRESSION_MIDDLEWARE', 'True').lower() == 'true'
 
 ####################################
 # Admin Account Runtime Creation
@@ -642,24 +656,24 @@ ENABLE_COMPRESSION_MIDDLEWARE = os.getenv('ENABLE_COMPRESSION_MIDDLEWARE', 'True
 
 # Optional env vars for creating an admin account on startup
 # Useful for headless/automated deployments
-WEBUI_ADMIN_EMAIL = os.getenv('WEBUI_ADMIN_EMAIL', '')
-WEBUI_ADMIN_PASSWORD = os.getenv('WEBUI_ADMIN_PASSWORD', '')
-WEBUI_ADMIN_NAME = os.getenv('WEBUI_ADMIN_NAME', 'Admin')
+WEBUI_ADMIN_EMAIL = get_env('WEBUI_ADMIN_EMAIL', '')
+WEBUI_ADMIN_PASSWORD = get_env('WEBUI_ADMIN_PASSWORD', '')
+WEBUI_ADMIN_NAME = get_env('WEBUI_ADMIN_NAME', 'Admin')
 
-WEBUI_AUTH_TRUSTED_EMAIL_HEADER = os.getenv('WEBUI_AUTH_TRUSTED_EMAIL_HEADER', None)
-WEBUI_AUTH_TRUSTED_NAME_HEADER = os.getenv('WEBUI_AUTH_TRUSTED_NAME_HEADER', None)
-WEBUI_AUTH_TRUSTED_GROUPS_HEADER = os.getenv('WEBUI_AUTH_TRUSTED_GROUPS_HEADER', None)
-WEBUI_AUTH_TRUSTED_ROLE_HEADER = os.getenv('WEBUI_AUTH_TRUSTED_ROLE_HEADER', None)
+WEBUI_AUTH_TRUSTED_EMAIL_HEADER = get_env('WEBUI_AUTH_TRUSTED_EMAIL_HEADER', None)
+WEBUI_AUTH_TRUSTED_NAME_HEADER = get_env('WEBUI_AUTH_TRUSTED_NAME_HEADER', None)
+WEBUI_AUTH_TRUSTED_GROUPS_HEADER = get_env('WEBUI_AUTH_TRUSTED_GROUPS_HEADER', None)
+WEBUI_AUTH_TRUSTED_ROLE_HEADER = get_env('WEBUI_AUTH_TRUSTED_ROLE_HEADER', None)
 
 # Custom header name for API key authentication.  Defaults to 'x-api-key'.
 # Useful when Open WebUI sits behind a reverse proxy / API gateway that
 # already uses the Authorization header for its own authentication — set
 # this to a unique header (e.g. 'X-OpenWebUI-Key') so the middleware
 # checks the custom header instead and avoids the 401 short-circuit.
-CUSTOM_API_KEY_HEADER = os.getenv('CUSTOM_API_KEY_HEADER', 'x-api-key')
+CUSTOM_API_KEY_HEADER = get_env('CUSTOM_API_KEY_HEADER', 'x-api-key')
 
-ENABLE_PASSWORD_VALIDATION = os.getenv('ENABLE_PASSWORD_VALIDATION', 'False').lower() == 'true'
-PASSWORD_VALIDATION_REGEX_PATTERN = os.getenv(
+ENABLE_PASSWORD_VALIDATION = get_env('ENABLE_PASSWORD_VALIDATION', 'False').lower() == 'true'
+PASSWORD_VALIDATION_REGEX_PATTERN = get_env(
     'PASSWORD_VALIDATION_REGEX_PATTERN',
     r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$',
 )
@@ -672,62 +686,62 @@ except Exception as e:
     log.error(f'Invalid PASSWORD_VALIDATION_REGEX_PATTERN: {e}')
     PASSWORD_VALIDATION_REGEX_PATTERN = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$')
 
-PASSWORD_VALIDATION_HINT = os.getenv('PASSWORD_VALIDATION_HINT', '')
+PASSWORD_VALIDATION_HINT = get_env('PASSWORD_VALIDATION_HINT', '')
 
 
-BYPASS_MODEL_ACCESS_CONTROL = os.getenv('BYPASS_MODEL_ACCESS_CONTROL', 'False').lower() == 'true'
-BYPASS_RETRIEVAL_ACCESS_CONTROL = os.getenv('BYPASS_RETRIEVAL_ACCESS_CONTROL', 'False').lower() == 'true'
+BYPASS_MODEL_ACCESS_CONTROL = get_env('BYPASS_MODEL_ACCESS_CONTROL', 'False').lower() == 'true'
+BYPASS_RETRIEVAL_ACCESS_CONTROL = get_env('BYPASS_RETRIEVAL_ACCESS_CONTROL', 'False').lower() == 'true'
 
 # When True, collection names that do not match any known file-*, user-memory-*,
 # web-search-*, or knowledge-base collection are allowed through access control
 # for non-admin users.  When False (default), unknown collection names are
 # denied — closing the legacy unscoped namespace.
-ENABLE_RETRIEVAL_UNSCOPED_COLLECTIONS = os.getenv('ENABLE_RETRIEVAL_UNSCOPED_COLLECTIONS', 'False').lower() == 'true'
+ENABLE_RETRIEVAL_UNSCOPED_COLLECTIONS = get_env('ENABLE_RETRIEVAL_UNSCOPED_COLLECTIONS', 'False').lower() == 'true'
 
 # When enabled, skips pydub-based preprocessing (format conversion, compression,
 # and chunked splitting) before sending files to processing engines. Useful when
 # the upstream provider handles these steps or when ffmpeg is unavailable.
-BYPASS_PYDUB_PREPROCESSING = os.getenv('BYPASS_PYDUB_PREPROCESSING', 'False').lower() == 'true'
+BYPASS_PYDUB_PREPROCESSING = get_env('BYPASS_PYDUB_PREPROCESSING', 'False').lower() == 'true'
 
 # When disabled (default), the OpenAI catch-all proxy endpoint (/{path:path})
 # is blocked. Enable only if you need direct passthrough to upstream OpenAI-
 # compatible APIs for endpoints not natively handled by Open WebUI.
-ENABLE_OPENAI_API_PASSTHROUGH = os.getenv('ENABLE_OPENAI_API_PASSTHROUGH', 'False').lower() == 'true'
+ENABLE_OPENAI_API_PASSTHROUGH = get_env('ENABLE_OPENAI_API_PASSTHROUGH', 'False').lower() == 'true'
 
-WEBUI_AUTH_SIGNOUT_REDIRECT_URL = os.getenv('WEBUI_AUTH_SIGNOUT_REDIRECT_URL', None)
+WEBUI_AUTH_SIGNOUT_REDIRECT_URL = get_env('WEBUI_AUTH_SIGNOUT_REDIRECT_URL', None)
 
 ####################################
 # OAUTH Configuration
 ####################################
-ENABLE_OAUTH_EMAIL_FALLBACK = os.getenv('ENABLE_OAUTH_EMAIL_FALLBACK', 'False').lower() == 'true'
+ENABLE_OAUTH_EMAIL_FALLBACK = get_env('ENABLE_OAUTH_EMAIL_FALLBACK', 'False').lower() == 'true'
 
-ENABLE_OAUTH_ID_TOKEN_COOKIE = os.getenv('ENABLE_OAUTH_ID_TOKEN_COOKIE', 'True').lower() == 'true'
+ENABLE_OAUTH_ID_TOKEN_COOKIE = get_env('ENABLE_OAUTH_ID_TOKEN_COOKIE', 'True').lower() == 'true'
 
-OAUTH_CLIENT_INFO_ENCRYPTION_KEY = os.getenv('OAUTH_CLIENT_INFO_ENCRYPTION_KEY', WEBUI_SECRET_KEY)
+OAUTH_CLIENT_INFO_ENCRYPTION_KEY = get_env('OAUTH_CLIENT_INFO_ENCRYPTION_KEY', WEBUI_SECRET_KEY)
 
-OAUTH_SESSION_TOKEN_ENCRYPTION_KEY = os.getenv('OAUTH_SESSION_TOKEN_ENCRYPTION_KEY', WEBUI_SECRET_KEY)
+OAUTH_SESSION_TOKEN_ENCRYPTION_KEY = get_env('OAUTH_SESSION_TOKEN_ENCRYPTION_KEY', WEBUI_SECRET_KEY)
 
 # Maximum number of concurrent OAuth sessions per user per provider
 # This prevents unbounded session growth while allowing multi-device usage
-OAUTH_MAX_SESSIONS_PER_USER = int(os.getenv('OAUTH_MAX_SESSIONS_PER_USER', '10'))
+OAUTH_MAX_SESSIONS_PER_USER = int(get_env('OAUTH_MAX_SESSIONS_PER_USER', '10'))
 
 # Token Exchange Configuration
 # Allows external apps to exchange OAuth tokens for OpenWebUI tokens
-ENABLE_OAUTH_TOKEN_EXCHANGE = os.getenv('ENABLE_OAUTH_TOKEN_EXCHANGE', 'False').lower() == 'true'
+ENABLE_OAUTH_TOKEN_EXCHANGE = get_env('ENABLE_OAUTH_TOKEN_EXCHANGE', 'False').lower() == 'true'
 
 # Back-Channel Logout Configuration
 # When enabled, exposes POST /oauth/backchannel-logout for IdP-initiated logout
 # per OpenID Connect Back-Channel Logout 1.0 spec.
 # Requires Redis for JWT revocation.
-ENABLE_OAUTH_BACKCHANNEL_LOGOUT = os.getenv('ENABLE_OAUTH_BACKCHANNEL_LOGOUT', 'False').lower() == 'true'
+ENABLE_OAUTH_BACKCHANNEL_LOGOUT = get_env('ENABLE_OAUTH_BACKCHANNEL_LOGOUT', 'False').lower() == 'true'
 
 ####################################
 # SCIM Configuration
 ####################################
 
-ENABLE_SCIM = os.getenv('ENABLE_SCIM', os.getenv('SCIM_ENABLED', 'False')).lower() == 'true'
-SCIM_TOKEN = os.getenv('SCIM_TOKEN', '')
-SCIM_AUTH_PROVIDER = os.getenv('SCIM_AUTH_PROVIDER', '')
+ENABLE_SCIM = get_env('ENABLE_SCIM', get_env('SCIM_ENABLED', 'False')).lower() == 'true'
+SCIM_TOKEN = get_env('SCIM_TOKEN', '')
+SCIM_AUTH_PROVIDER = get_env('SCIM_AUTH_PROVIDER', '')
 
 if ENABLE_SCIM and not SCIM_AUTH_PROVIDER:
     log.warning(
@@ -740,15 +754,15 @@ if ENABLE_SCIM and not SCIM_AUTH_PROVIDER:
 # LICENSE_KEY
 ####################################
 
-LICENSE_KEY = os.getenv('LICENSE_KEY', '')
+LICENSE_KEY = get_env('LICENSE_KEY', '')
 
 LICENSE_BLOB = None
-LICENSE_BLOB_PATH = os.getenv('LICENSE_BLOB_PATH', DATA_DIR / 'l.data')
+LICENSE_BLOB_PATH = get_env('LICENSE_BLOB_PATH', DATA_DIR / 'l.data')
 if LICENSE_BLOB_PATH and os.path.exists(LICENSE_BLOB_PATH):
     with open(LICENSE_BLOB_PATH, 'rb') as f:
         LICENSE_BLOB = f.read()
 
-LICENSE_PUBLIC_KEY = os.getenv('LICENSE_PUBLIC_KEY', '')
+LICENSE_PUBLIC_KEY = get_env('LICENSE_PUBLIC_KEY', '')
 
 pk = None
 if LICENSE_PUBLIC_KEY:
@@ -765,25 +779,25 @@ if LICENSE_PUBLIC_KEY:
 # WEBUI Identity
 ####################################
 
-WEBUI_NAME = os.getenv('WEBUI_NAME', 'Open WebUI')
+WEBUI_NAME = get_env('WEBUI_NAME', 'Open WebUI')
 
-WEBUI_FAVICON_URL = os.getenv('WEBUI_FAVICON_URL', '/static/chatgpt-logo.svg')
-WEBUI_BUILD_HASH = os.getenv('WEBUI_BUILD_HASH', 'dev-build')
-TRUSTED_SIGNATURE_KEY = os.getenv('TRUSTED_SIGNATURE_KEY', '')
+WEBUI_FAVICON_URL = get_env('WEBUI_FAVICON_URL', '/static/chatgpt-logo.svg')
+WEBUI_BUILD_HASH = get_env('WEBUI_BUILD_HASH', 'dev-build')
+TRUSTED_SIGNATURE_KEY = get_env('TRUSTED_SIGNATURE_KEY', '')
 
 ####################################
 # Feature flags
 ####################################
 
-SAFE_MODE = os.getenv('SAFE_MODE', 'False').lower() == 'true'
-ENABLE_EASTER_EGGS = os.getenv('ENABLE_EASTER_EGGS', 'True').lower() == 'true'
-ENABLE_STAR_SESSIONS_MIDDLEWARE = os.getenv('ENABLE_STAR_SESSIONS_MIDDLEWARE', 'False').lower() == 'true'
-ENABLE_KB_EXEC = os.getenv('ENABLE_KB_EXEC', 'False').lower() == 'true'
+SAFE_MODE = get_env('SAFE_MODE', 'False').lower() == 'true'
+ENABLE_EASTER_EGGS = get_env('ENABLE_EASTER_EGGS', 'True').lower() == 'true'
+ENABLE_STAR_SESSIONS_MIDDLEWARE = get_env('ENABLE_STAR_SESSIONS_MIDDLEWARE', 'False').lower() == 'true'
+ENABLE_KB_EXEC = get_env('ENABLE_KB_EXEC', 'False').lower() == 'true'
 
-ENABLE_PROFILE_IMAGE_URL_FORWARDING = os.getenv('ENABLE_PROFILE_IMAGE_URL_FORWARDING', 'True').lower() == 'true'
+ENABLE_PROFILE_IMAGE_URL_FORWARDING = get_env('ENABLE_PROFILE_IMAGE_URL_FORWARDING', 'True').lower() == 'true'
 PROFILE_IMAGE_ALLOWED_MIME_TYPES = frozenset(
     t.strip()
-    for t in os.getenv(
+    for t in get_env(
         'PROFILE_IMAGE_ALLOWED_MIME_TYPES',
         'image/png,image/jpeg,image/gif,image/webp',
     ).split(',')
@@ -792,21 +806,21 @@ PROFILE_IMAGE_ALLOWED_MIME_TYPES = frozenset(
 
 # Max stored length (bytes) of a data:image profile URI; bounds Postgres/Redis
 # bloat from inline avatars and model icons. Unset (default) disables the cap.
-_profile_image_max_data_uri_size = os.getenv('PROFILE_IMAGE_MAX_DATA_URI_SIZE', '').strip()
+_profile_image_max_data_uri_size = get_env('PROFILE_IMAGE_MAX_DATA_URI_SIZE', '').strip()
 PROFILE_IMAGE_MAX_DATA_URI_SIZE = int(_profile_image_max_data_uri_size) if _profile_image_max_data_uri_size else None
 
 ####################################
 # Forward Headers
 ####################################
 
-ENABLE_FORWARD_USER_INFO_HEADERS = os.getenv('ENABLE_FORWARD_USER_INFO_HEADERS', 'False').lower() == 'true'
+ENABLE_FORWARD_USER_INFO_HEADERS = get_env('ENABLE_FORWARD_USER_INFO_HEADERS', 'False').lower() == 'true'
 
-FORWARD_USER_INFO_HEADER_USER_NAME = os.getenv('FORWARD_USER_INFO_HEADER_USER_NAME', 'X-OpenWebUI-User-Name')
-FORWARD_USER_INFO_HEADER_USER_ID = os.getenv('FORWARD_USER_INFO_HEADER_USER_ID', 'X-OpenWebUI-User-Id')
-FORWARD_USER_INFO_HEADER_USER_EMAIL = os.getenv('FORWARD_USER_INFO_HEADER_USER_EMAIL', 'X-OpenWebUI-User-Email')
-FORWARD_USER_INFO_HEADER_USER_ROLE = os.getenv('FORWARD_USER_INFO_HEADER_USER_ROLE', 'X-OpenWebUI-User-Role')
-FORWARD_SESSION_INFO_HEADER_MESSAGE_ID = os.getenv('FORWARD_SESSION_INFO_HEADER_MESSAGE_ID', 'X-OpenWebUI-Message-Id')
-FORWARD_SESSION_INFO_HEADER_CHAT_ID = os.getenv('FORWARD_SESSION_INFO_HEADER_CHAT_ID', 'X-OpenWebUI-Chat-Id')
+FORWARD_USER_INFO_HEADER_USER_NAME = get_env('FORWARD_USER_INFO_HEADER_USER_NAME', 'X-OpenWebUI-User-Name')
+FORWARD_USER_INFO_HEADER_USER_ID = get_env('FORWARD_USER_INFO_HEADER_USER_ID', 'X-OpenWebUI-User-Id')
+FORWARD_USER_INFO_HEADER_USER_EMAIL = get_env('FORWARD_USER_INFO_HEADER_USER_EMAIL', 'X-OpenWebUI-User-Email')
+FORWARD_USER_INFO_HEADER_USER_ROLE = get_env('FORWARD_USER_INFO_HEADER_USER_ROLE', 'X-OpenWebUI-User-Role')
+FORWARD_SESSION_INFO_HEADER_MESSAGE_ID = get_env('FORWARD_SESSION_INFO_HEADER_MESSAGE_ID', 'X-OpenWebUI-Message-Id')
+FORWARD_SESSION_INFO_HEADER_CHAT_ID = get_env('FORWARD_SESSION_INFO_HEADER_CHAT_ID', 'X-OpenWebUI-Chat-Id')
 
 # If set while ENABLE_FORWARD_USER_INFO_HEADERS is True, send one signed HS256 JWT
 # (FORWARD_USER_INFO_HEADER_JWT) instead of separate X-OpenWebUI-User-* headers.
@@ -823,7 +837,7 @@ except ValueError:
 # Progressive Web App
 ####################################
 
-EXTERNAL_PWA_MANIFEST_URL = os.getenv('EXTERNAL_PWA_MANIFEST_URL', None)
+EXTERNAL_PWA_MANIFEST_URL = get_env('EXTERNAL_PWA_MANIFEST_URL', None)
 
 ####################################
 # GROUP DEFAULTS
@@ -831,16 +845,16 @@ EXTERNAL_PWA_MANIFEST_URL = os.getenv('EXTERNAL_PWA_MANIFEST_URL', None)
 
 # Controls the default "Who can share to this group" setting for new groups.
 # Env var values: "true" (anyone), "false" (no one), "members" (only group members).
-_default_group_share = os.getenv('DEFAULT_GROUP_SHARE_PERMISSION', 'members').strip().lower()
+_default_group_share = get_env('DEFAULT_GROUP_SHARE_PERMISSION', 'members').strip().lower()
 DEFAULT_GROUP_SHARE_PERMISSION = 'members' if _default_group_share == 'members' else _default_group_share == 'true'
 
 ####################################
 # MODELS
 ####################################
 
-ENABLE_CUSTOM_MODEL_FALLBACK = os.getenv('ENABLE_CUSTOM_MODEL_FALLBACK', 'False').lower() == 'true'
+ENABLE_CUSTOM_MODEL_FALLBACK = get_env('ENABLE_CUSTOM_MODEL_FALLBACK', 'False').lower() == 'true'
 
-MODELS_CACHE_TTL = os.getenv('MODELS_CACHE_TTL', '1')
+MODELS_CACHE_TTL = get_env('MODELS_CACHE_TTL', '1')
 if MODELS_CACHE_TTL == '':
     MODELS_CACHE_TTL = None
 else:
@@ -855,7 +869,7 @@ else:
 ####################################
 
 ENABLE_CHAT_RESPONSE_BASE64_IMAGE_URL_CONVERSION = (
-    os.getenv('ENABLE_CHAT_RESPONSE_BASE64_IMAGE_URL_CONVERSION', 'False').lower() == 'true'
+    get_env('ENABLE_CHAT_RESPONSE_BASE64_IMAGE_URL_CONVERSION', 'False').lower() == 'true'
 )
 
 # When enabled, uses a hardcoded extension-to-MIME dictionary as a last-resort
@@ -864,10 +878,10 @@ ENABLE_CHAT_RESPONSE_BASE64_IMAGE_URL_CONVERSION = (
 # wolfi-base) that lack /etc/mime.types AND have legacy files without stored
 # content_type metadata.
 ENABLE_IMAGE_CONTENT_TYPE_EXTENSION_FALLBACK = (
-    os.getenv('ENABLE_IMAGE_CONTENT_TYPE_EXTENSION_FALLBACK', 'False').lower() == 'true'
+    get_env('ENABLE_IMAGE_CONTENT_TYPE_EXTENSION_FALLBACK', 'False').lower() == 'true'
 )
 
-CHAT_RESPONSE_STREAM_DELTA_CHUNK_SIZE = os.getenv('CHAT_RESPONSE_STREAM_DELTA_CHUNK_SIZE', '1')
+CHAT_RESPONSE_STREAM_DELTA_CHUNK_SIZE = get_env('CHAT_RESPONSE_STREAM_DELTA_CHUNK_SIZE', '1')
 
 if CHAT_RESPONSE_STREAM_DELTA_CHUNK_SIZE == '':
     CHAT_RESPONSE_STREAM_DELTA_CHUNK_SIZE = 1
@@ -880,9 +894,9 @@ else:
 
 # Maximum tool-call iterations per chat response. Set to -1 for unlimited.
 # The old CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES name is accepted as a fallback.
-CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS = os.getenv(
+CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS = get_env(
     'CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS',
-    os.getenv('CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES', '256'),
+    get_env('CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES', '256'),
 )
 
 if CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS == '':
@@ -902,10 +916,10 @@ if CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS == -1:
 # supports stateful sessions (i.e. server-side response storage with
 # previous_response_id anchoring). Most proxies and third-party endpoints
 # are stateless and will break if this is enabled.
-ENABLE_RESPONSES_API_STATEFUL = os.getenv('ENABLE_RESPONSES_API_STATEFUL', 'False').lower() == 'true'
+ENABLE_RESPONSES_API_STATEFUL = get_env('ENABLE_RESPONSES_API_STATEFUL', 'False').lower() == 'true'
 
 
-CHAT_STREAM_RESPONSE_CHUNK_MAX_BUFFER_SIZE = os.getenv('CHAT_STREAM_RESPONSE_CHUNK_MAX_BUFFER_SIZE', '')
+CHAT_STREAM_RESPONSE_CHUNK_MAX_BUFFER_SIZE = get_env('CHAT_STREAM_RESPONSE_CHUNK_MAX_BUFFER_SIZE', '')
 
 if CHAT_STREAM_RESPONSE_CHUNK_MAX_BUFFER_SIZE == '':
     CHAT_STREAM_RESPONSE_CHUNK_MAX_BUFFER_SIZE = None
@@ -926,7 +940,7 @@ else:
 # When enabled (default), scores are normalized to 0-1 range for proper
 # relevance threshold behavior with MS MARCO models.
 SENTENCE_TRANSFORMERS_CROSS_ENCODER_SIGMOID_ACTIVATION_FUNCTION = (
-    os.getenv('SENTENCE_TRANSFORMERS_CROSS_ENCODER_SIGMOID_ACTIVATION_FUNCTION', 'True').lower() == 'true'
+    get_env('SENTENCE_TRANSFORMERS_CROSS_ENCODER_SIGMOID_ACTIVATION_FUNCTION', 'True').lower() == 'true'
 )
 
 ####################################
@@ -934,19 +948,19 @@ SENTENCE_TRANSFORMERS_CROSS_ENCODER_SIGMOID_ACTIVATION_FUNCTION = (
 ####################################
 
 ENABLE_PIP_INSTALL_FRONTMATTER_REQUIREMENTS = (
-    os.getenv('ENABLE_PIP_INSTALL_FRONTMATTER_REQUIREMENTS', 'True').lower() == 'true'
+    get_env('ENABLE_PIP_INSTALL_FRONTMATTER_REQUIREMENTS', 'True').lower() == 'true'
 )
 
-PIP_OPTIONS = os.getenv('PIP_OPTIONS', '').split()
-PIP_PACKAGE_INDEX_OPTIONS = os.getenv('PIP_PACKAGE_INDEX_OPTIONS', '').split()
+PIP_OPTIONS = get_env('PIP_OPTIONS', '').split()
+PIP_PACKAGE_INDEX_OPTIONS = get_env('PIP_PACKAGE_INDEX_OPTIONS', '').split()
 
 
 ####################################
 # OFFLINE_MODE
 ####################################
 
-ENABLE_VERSION_UPDATE_CHECK = os.getenv('ENABLE_VERSION_UPDATE_CHECK', 'true').lower() == 'true'
-OFFLINE_MODE = os.getenv('OFFLINE_MODE', 'false').lower() == 'true'
+ENABLE_VERSION_UPDATE_CHECK = get_env('ENABLE_VERSION_UPDATE_CHECK', 'true').lower() == 'true'
+OFFLINE_MODE = get_env('OFFLINE_MODE', 'false').lower() == 'true'
 
 if OFFLINE_MODE:
     os.environ['HF_HUB_OFFLINE'] = '1'
@@ -957,80 +971,80 @@ if OFFLINE_MODE:
 ####################################
 
 
-ENABLE_AUDIT_STDOUT = os.getenv('ENABLE_AUDIT_STDOUT', 'False').lower() == 'true'
-ENABLE_AUDIT_LOGS_FILE = os.getenv('ENABLE_AUDIT_LOGS_FILE', 'True').lower() == 'true'
+ENABLE_AUDIT_STDOUT = get_env('ENABLE_AUDIT_STDOUT', 'False').lower() == 'true'
+ENABLE_AUDIT_LOGS_FILE = get_env('ENABLE_AUDIT_LOGS_FILE', 'True').lower() == 'true'
 
 # Where to store log file
 # Defaults to the DATA_DIR/audit.log. To set AUDIT_LOGS_FILE_PATH you need to
 # provide the whole path, like: /app/audit.log
-AUDIT_LOGS_FILE_PATH = os.getenv('AUDIT_LOGS_FILE_PATH', f'{DATA_DIR}/audit.log')
+AUDIT_LOGS_FILE_PATH = get_env('AUDIT_LOGS_FILE_PATH', f'{DATA_DIR}/audit.log')
 # Maximum size of a file before rotating into a new log file
-AUDIT_LOG_FILE_ROTATION_SIZE = os.getenv('AUDIT_LOG_FILE_ROTATION_SIZE', '10MB')
+AUDIT_LOG_FILE_ROTATION_SIZE = get_env('AUDIT_LOG_FILE_ROTATION_SIZE', '10MB')
 
 # Comma separated list of logger names to use for audit logging
 # Default is "uvicorn.access" which is the access log for Uvicorn
 # You can add more logger names to this list if you want to capture more logs
-AUDIT_UVICORN_LOGGER_NAMES = os.getenv('AUDIT_UVICORN_LOGGER_NAMES', 'uvicorn.access').split(',')
+AUDIT_UVICORN_LOGGER_NAMES = get_env('AUDIT_UVICORN_LOGGER_NAMES', 'uvicorn.access').split(',')
 
 # METADATA | REQUEST | REQUEST_RESPONSE
-AUDIT_LOG_LEVEL = os.getenv('AUDIT_LOG_LEVEL', 'NONE').upper()
+AUDIT_LOG_LEVEL = get_env('AUDIT_LOG_LEVEL', 'NONE').upper()
 try:
-    MAX_BODY_LOG_SIZE = int(os.getenv('MAX_BODY_LOG_SIZE') or 2048)
+    MAX_BODY_LOG_SIZE = int(get_env('MAX_BODY_LOG_SIZE') or 2048)
 except ValueError:
     MAX_BODY_LOG_SIZE = 2048
 
 # Comma separated list for urls to exclude from audit
-AUDIT_EXCLUDED_PATHS = os.getenv('AUDIT_EXCLUDED_PATHS', '/chats,/chat,/folders').split(',')
+AUDIT_EXCLUDED_PATHS = get_env('AUDIT_EXCLUDED_PATHS', '/chats,/chat,/folders').split(',')
 AUDIT_EXCLUDED_PATHS = [path.strip() for path in AUDIT_EXCLUDED_PATHS]
 AUDIT_EXCLUDED_PATHS = [path.lstrip('/') for path in AUDIT_EXCLUDED_PATHS]
 
 # Comma separated list of urls to include in audit (whitelist mode)
 # When set, only these paths are audited and AUDIT_EXCLUDED_PATHS is ignored
-AUDIT_INCLUDED_PATHS = os.getenv('AUDIT_INCLUDED_PATHS', '').split(',')
+AUDIT_INCLUDED_PATHS = get_env('AUDIT_INCLUDED_PATHS', '').split(',')
 AUDIT_INCLUDED_PATHS = [path.strip() for path in AUDIT_INCLUDED_PATHS]
 AUDIT_INCLUDED_PATHS = [path.lstrip('/') for path in AUDIT_INCLUDED_PATHS if path]
 
 # When enabled, GET requests are also audited (disabled by default to avoid log noise)
-ENABLE_AUDIT_GET_REQUESTS = os.getenv('ENABLE_AUDIT_GET_REQUESTS', 'False').lower() == 'true'
+ENABLE_AUDIT_GET_REQUESTS = get_env('ENABLE_AUDIT_GET_REQUESTS', 'False').lower() == 'true'
 
 
 ####################################
 # OPENTELEMETRY
 ####################################
 
-ENABLE_OTEL = os.getenv('ENABLE_OTEL', 'False').lower() == 'true'
-ENABLE_OTEL_TRACES = os.getenv('ENABLE_OTEL_TRACES', 'False').lower() == 'true'
-ENABLE_OTEL_METRICS = os.getenv('ENABLE_OTEL_METRICS', 'False').lower() == 'true'
-ENABLE_OTEL_LOGS = os.getenv('ENABLE_OTEL_LOGS', 'False').lower() == 'true'
+ENABLE_OTEL = get_env('ENABLE_OTEL', 'False').lower() == 'true'
+ENABLE_OTEL_TRACES = get_env('ENABLE_OTEL_TRACES', 'False').lower() == 'true'
+ENABLE_OTEL_METRICS = get_env('ENABLE_OTEL_METRICS', 'False').lower() == 'true'
+ENABLE_OTEL_LOGS = get_env('ENABLE_OTEL_LOGS', 'False').lower() == 'true'
 
-OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4317')
-OTEL_METRICS_EXPORTER_OTLP_ENDPOINT = os.getenv('OTEL_METRICS_EXPORTER_OTLP_ENDPOINT', OTEL_EXPORTER_OTLP_ENDPOINT)
-OTEL_LOGS_EXPORTER_OTLP_ENDPOINT = os.getenv('OTEL_LOGS_EXPORTER_OTLP_ENDPOINT', OTEL_EXPORTER_OTLP_ENDPOINT)
-OTEL_EXPORTER_OTLP_INSECURE = os.getenv('OTEL_EXPORTER_OTLP_INSECURE', 'False').lower() == 'true'
+OTEL_EXPORTER_OTLP_ENDPOINT = get_env('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4317')
+OTEL_METRICS_EXPORTER_OTLP_ENDPOINT = get_env('OTEL_METRICS_EXPORTER_OTLP_ENDPOINT', OTEL_EXPORTER_OTLP_ENDPOINT)
+OTEL_LOGS_EXPORTER_OTLP_ENDPOINT = get_env('OTEL_LOGS_EXPORTER_OTLP_ENDPOINT', OTEL_EXPORTER_OTLP_ENDPOINT)
+OTEL_EXPORTER_OTLP_INSECURE = get_env('OTEL_EXPORTER_OTLP_INSECURE', 'False').lower() == 'true'
 OTEL_METRICS_EXPORTER_OTLP_INSECURE = (
-    os.getenv('OTEL_METRICS_EXPORTER_OTLP_INSECURE', str(OTEL_EXPORTER_OTLP_INSECURE)).lower() == 'true'
+    get_env('OTEL_METRICS_EXPORTER_OTLP_INSECURE', str(OTEL_EXPORTER_OTLP_INSECURE)).lower() == 'true'
 )
 OTEL_LOGS_EXPORTER_OTLP_INSECURE = (
-    os.getenv('OTEL_LOGS_EXPORTER_OTLP_INSECURE', str(OTEL_EXPORTER_OTLP_INSECURE)).lower() == 'true'
+    get_env('OTEL_LOGS_EXPORTER_OTLP_INSECURE', str(OTEL_EXPORTER_OTLP_INSECURE)).lower() == 'true'
 )
-OTEL_SERVICE_NAME = os.getenv('OTEL_SERVICE_NAME', 'open-webui')
-OTEL_RESOURCE_ATTRIBUTES = os.getenv('OTEL_RESOURCE_ATTRIBUTES', '')  # e.g. key1=val1,key2=val2
-OTEL_TRACES_SAMPLER = os.getenv('OTEL_TRACES_SAMPLER', 'parentbased_always_on').lower()
-OTEL_BASIC_AUTH_USERNAME = os.getenv('OTEL_BASIC_AUTH_USERNAME', '')
-OTEL_BASIC_AUTH_PASSWORD = os.getenv('OTEL_BASIC_AUTH_PASSWORD', '')
-OTEL_METRICS_EXPORT_INTERVAL_MILLIS = int(os.getenv('OTEL_METRICS_EXPORT_INTERVAL_MILLIS', '10000'))
+OTEL_SERVICE_NAME = get_env('OTEL_SERVICE_NAME', 'open-webui')
+OTEL_RESOURCE_ATTRIBUTES = get_env('OTEL_RESOURCE_ATTRIBUTES', '')  # e.g. key1=val1,key2=val2
+OTEL_TRACES_SAMPLER = get_env('OTEL_TRACES_SAMPLER', 'parentbased_always_on').lower()
+OTEL_BASIC_AUTH_USERNAME = get_env('OTEL_BASIC_AUTH_USERNAME', '')
+OTEL_BASIC_AUTH_PASSWORD = get_env('OTEL_BASIC_AUTH_PASSWORD', '')
+OTEL_METRICS_EXPORT_INTERVAL_MILLIS = int(get_env('OTEL_METRICS_EXPORT_INTERVAL_MILLIS', '10000'))
 
-OTEL_METRICS_BASIC_AUTH_USERNAME = os.getenv('OTEL_METRICS_BASIC_AUTH_USERNAME', OTEL_BASIC_AUTH_USERNAME)
-OTEL_METRICS_BASIC_AUTH_PASSWORD = os.getenv('OTEL_METRICS_BASIC_AUTH_PASSWORD', OTEL_BASIC_AUTH_PASSWORD)
-OTEL_LOGS_BASIC_AUTH_USERNAME = os.getenv('OTEL_LOGS_BASIC_AUTH_USERNAME', OTEL_BASIC_AUTH_USERNAME)
-OTEL_LOGS_BASIC_AUTH_PASSWORD = os.getenv('OTEL_LOGS_BASIC_AUTH_PASSWORD', OTEL_BASIC_AUTH_PASSWORD)
+OTEL_METRICS_BASIC_AUTH_USERNAME = get_env('OTEL_METRICS_BASIC_AUTH_USERNAME', OTEL_BASIC_AUTH_USERNAME)
+OTEL_METRICS_BASIC_AUTH_PASSWORD = get_env('OTEL_METRICS_BASIC_AUTH_PASSWORD', OTEL_BASIC_AUTH_PASSWORD)
+OTEL_LOGS_BASIC_AUTH_USERNAME = get_env('OTEL_LOGS_BASIC_AUTH_USERNAME', OTEL_BASIC_AUTH_USERNAME)
+OTEL_LOGS_BASIC_AUTH_PASSWORD = get_env('OTEL_LOGS_BASIC_AUTH_PASSWORD', OTEL_BASIC_AUTH_PASSWORD)
 
-OTEL_OTLP_SPAN_EXPORTER = os.getenv('OTEL_OTLP_SPAN_EXPORTER', 'grpc').lower()  # grpc or http
+OTEL_OTLP_SPAN_EXPORTER = get_env('OTEL_OTLP_SPAN_EXPORTER', 'grpc').lower()  # grpc or http
 
-OTEL_METRICS_OTLP_SPAN_EXPORTER = os.getenv(
+OTEL_METRICS_OTLP_SPAN_EXPORTER = get_env(
     'OTEL_METRICS_OTLP_SPAN_EXPORTER', OTEL_OTLP_SPAN_EXPORTER
 ).lower()  # grpc or http
 
-OTEL_LOGS_OTLP_SPAN_EXPORTER = os.getenv(
+OTEL_LOGS_OTLP_SPAN_EXPORTER = get_env(
     'OTEL_LOGS_OTLP_SPAN_EXPORTER', OTEL_OTLP_SPAN_EXPORTER
 ).lower()  # grpc or http
