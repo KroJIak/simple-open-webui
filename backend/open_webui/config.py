@@ -1902,15 +1902,17 @@ IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN = get_env('IMAGE_URL_RESPONSE_MODELS_REG
 IMAGE_SIZE = ConfigVar('IMAGE_SIZE', 'image_generation.size', get_env('IMAGE_SIZE', ''))
 
 # How many images of the chat history are forwarded to the model provider.
-# Every request resends the whole history, so a chat with hundreds of images
-# would exceed the provider's request timeout. The images are downscaled
-# first (MAX_IMAGE_SIDE), which is what makes them cheap for the provider;
-# this limit is only the safety net for pathological chats. 0 = no limit.
-MAX_IMAGES_PER_REQUEST = int(get_env('MAX_IMAGES_PER_REQUEST', '50') or 50)
+# Every request resends the whole history and every image costs the provider
+# time to decode (about 0.5s for a 512x512 image), so this limit decides how
+# fast a request with many screenshots is answered. The images are downscaled
+# first (MAX_IMAGE_SIDE), the most recent ones are the ones that are kept.
+# 0 = no limit.
+MAX_IMAGES_PER_REQUEST = int(get_env('MAX_IMAGES_PER_REQUEST', '20') or 20)
 
 # Images larger than this are downscaled before they are sent to the provider.
-# The model sees the same picture, but the provider decodes it ~10x faster.
-# 0 = do not resize.
+# The model sees the same picture, but the provider decodes it much faster.
+# The cost of an image is proportional to its pixels: a 512x512 image costs the
+# provider about 0.5s, a 256x256 one about 0.25s. 0 = do not resize.
 MAX_IMAGE_SIDE = int(get_env('MAX_IMAGE_SIDE', '512') or 0)
 
 # JPEG quality used for the resized images.
