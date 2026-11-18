@@ -1871,16 +1871,21 @@ IMAGE_GENERATION_ENGINE = ConfigVar(
     os.getenv('IMAGE_GENERATION_ENGINE', 'openai'),
 )
 
+# The image model(s) to use. Either a single model id
+# ("gpt-image-2.6-sunburst") or a comma separated chain, where the first
+# entry is the primary model and the rest are tried in order when it fails
+# ("gpt-image-2.6-sunburst,gpt-image-2.6-flare,gpt-image-2"). The provider
+# rotates and breaks image models regularly, so a chain keeps the feature
+# working instead of failing on the first error.
 IMAGE_GENERATION_MODEL = ConfigVar(
     'IMAGE_GENERATION_MODEL',
     'image_generation.model',
     os.getenv('IMAGE_GENERATION_MODEL', ''),
 )
 
-# Comma separated list of image models used as a fallback chain: the primary
-# IMAGE_GENERATION_MODEL is tried first, then every entry here in order. The
-# provider rotates/breaks image models regularly, so a chain keeps the feature
-# working instead of failing on the first error.
+# Additional fallback models, appended to the chain of IMAGE_GENERATION_MODEL.
+# Kept separate so a single model can be configured without touching the
+# primary one.
 IMAGE_GENERATION_MODEL_FALLBACKS = ConfigVar(
     'IMAGE_GENERATION_MODEL_FALLBACKS',
     'image_generation.model_fallbacks',

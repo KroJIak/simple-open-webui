@@ -316,7 +316,10 @@
 							<div class="flex w-full justify-between items-center">
 								<div class="text-xs pr-2">
 									<div class="shrink-0">
-										{$i18n.t('Model')}
+										{$i18n.t('Image Models')}
+									</div>
+									<div class="text-[0.7rem] text-gray-500 dark:text-gray-400">
+										{$i18n.t('One model, or a comma separated chain tried in order')}
 									</div>
 								</div>
 
@@ -337,25 +340,6 @@
 								</Tooltip>
 							</div>
 						</div>
-
-					<div class="mb-2.5">
-						<div class="flex w-full justify-between items-center">
-							<div class="text-xs pr-2">
-								<div class="shrink-0">
-									{$i18n.t('Fallback Models')}
-								</div>
-								<div class="text-[0.7rem] text-gray-500 dark:text-gray-400">
-									{$i18n.t('Comma separated list of models tried in order when the main model fails')}
-								</div>
-							</div>
-
-							<input
-								class=" text-right text-sm bg-transparent outline-hidden max-w-full w-52"
-								bind:value={config.IMAGE_GENERATION_MODEL_FALLBACKS}
-								placeholder="gpt-image-2"
-							/>
-						</div>
-					</div>
 
 						{#if ['comfyui', 'automatic1111', ''].includes(config?.IMAGE_GENERATION_ENGINE)}
 							<div class="mb-2.5">

@@ -2345,5 +2345,7 @@
 	"Youtube Language": "",
 	"Youtube Proxy URL": "",
 	"Fallback Models": "",
-	"Comma separated list of models tried in order when the main model fails": ""
+	"Comma separated list of models tried in order when the main model fails": "",
+	"Image Models": "",
+	"One model, or a comma separated chain tried in order": ""
 }

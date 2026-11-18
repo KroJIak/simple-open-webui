@@ -80,23 +80,49 @@ async def set_image_model(request: Request, model: str):
     return request.app.state.config.IMAGE_GENERATION_MODEL
 
 
+def parse_image_model_chain(value: str) -> list[str]:
+    """Split a comma separated model list into a clean chain.
+
+    A single model id yields a one element chain, so the same setting works
+    for both "one model" and "primary + fallbacks".
+    """
+    if not value:
+        return []
+
+    chain = []
+    for model_id in value.split(','):
+        model_id = model_id.strip()
+        if model_id and model_id not in chain:
+            chain.append(model_id)
+
+    return chain
+
+
+async def get_image_model_chain(request) -> list[str]:
+    """The image models to try, in order: the configured chain first, then
+    the additional fallbacks."""
+    chain = parse_image_model_chain(request.app.state.config.IMAGE_GENERATION_MODEL)
+    chain += [
+        model_id
+        for model_id in parse_image_model_chain(
+            request.app.state.config.IMAGE_GENERATION_MODEL_FALLBACKS or ''
+        )
+        if model_id not in chain
+    ]
+    return chain
+
+
 async def get_image_model(request):
     if request.app.state.config.IMAGE_GENERATION_ENGINE == 'openai':
-        return (
-            request.app.state.config.IMAGE_GENERATION_MODEL
-            if request.app.state.config.IMAGE_GENERATION_MODEL
-            else 'dall-e-2'
-        )
+        # The setting may hold a chain - the primary model is the first entry.
+        chain = parse_image_model_chain(request.app.state.config.IMAGE_GENERATION_MODEL)
+        return chain[0] if chain else 'dall-e-2'
     elif request.app.state.config.IMAGE_GENERATION_ENGINE == 'gemini':
-        return (
-            request.app.state.config.IMAGE_GENERATION_MODEL
-            if request.app.state.config.IMAGE_GENERATION_MODEL
-            else 'imagen-3.0-generate-002'
-        )
+        chain = parse_image_model_chain(request.app.state.config.IMAGE_GENERATION_MODEL)
+        return chain[0] if chain else 'imagen-3.0-generate-002'
     elif request.app.state.config.IMAGE_GENERATION_ENGINE == 'comfyui':
-        return (
-            request.app.state.config.IMAGE_GENERATION_MODEL if request.app.state.config.IMAGE_GENERATION_MODEL else ''
-        )
+        chain = parse_image_model_chain(request.app.state.config.IMAGE_GENERATION_MODEL)
+        return chain[0] if chain else ''
     elif (
         request.app.state.config.IMAGE_GENERATION_ENGINE == 'automatic1111'
         or request.app.state.config.IMAGE_GENERATION_ENGINE == ''
@@ -120,7 +146,6 @@ class ImagesConfig(BaseModel):
 
     IMAGE_GENERATION_ENGINE: str
     IMAGE_GENERATION_MODEL: str
-    IMAGE_GENERATION_MODEL_FALLBACKS: str
     IMAGE_SIZE: str | None
     IMAGE_STEPS: int | None
 
@@ -164,8 +189,9 @@ async def get_config(request: Request, user=Depends(get_admin_user)):
         'ENABLE_IMAGE_GENERATION': request.app.state.config.ENABLE_IMAGE_GENERATION,
         'ENABLE_IMAGE_PROMPT_GENERATION': request.app.state.config.ENABLE_IMAGE_PROMPT_GENERATION,
         'IMAGE_GENERATION_ENGINE': request.app.state.config.IMAGE_GENERATION_ENGINE,
-        'IMAGE_GENERATION_MODEL': request.app.state.config.IMAGE_GENERATION_MODEL,
-        'IMAGE_GENERATION_MODEL_FALLBACKS': request.app.state.config.IMAGE_GENERATION_MODEL_FALLBACKS,
+        # The full chain (primary first) is returned as one value, so the UI
+        # shows exactly what will be tried.
+        'IMAGE_GENERATION_MODEL': ','.join(await get_image_model_chain(request)),
         'IMAGE_SIZE': request.app.state.config.IMAGE_SIZE,
         'IMAGE_STEPS': request.app.state.config.IMAGE_STEPS,
         'IMAGES_OPENAI_API_BASE_URL': request.app.state.config.IMAGES_OPENAI_API_BASE_URL,
@@ -206,10 +232,13 @@ async def update_config(request: Request, form_data: ImagesConfig, user=Depends(
     request.app.state.config.ENABLE_IMAGE_PROMPT_GENERATION = form_data.ENABLE_IMAGE_PROMPT_GENERATION
 
     request.app.state.config.IMAGE_GENERATION_ENGINE = form_data.IMAGE_GENERATION_ENGINE
-    await set_image_model(request, form_data.IMAGE_GENERATION_MODEL)
-    request.app.state.config.IMAGE_GENERATION_MODEL_FALLBACKS = form_data.IMAGE_GENERATION_MODEL_FALLBACKS
+    # The UI submits the whole chain as one value: the first entry is the
+    # primary model, the rest are the fallbacks.
+    chain = parse_image_model_chain(form_data.IMAGE_GENERATION_MODEL)
+    await set_image_model(request, chain[0] if chain else '')
+    request.app.state.config.IMAGE_GENERATION_MODEL_FALLBACKS = ','.join(chain[1:])
     if form_data.IMAGE_SIZE == 'auto' and not re.match(
-        IMAGE_AUTO_SIZE_MODELS_REGEX_PATTERN, form_data.IMAGE_GENERATION_MODEL
+        IMAGE_AUTO_SIZE_MODELS_REGEX_PATTERN, chain[0] if chain else ''
     ):
         raise HTTPException(
             status_code=400,
@@ -275,8 +304,9 @@ async def update_config(request: Request, form_data: ImagesConfig, user=Depends(
         'ENABLE_IMAGE_GENERATION': request.app.state.config.ENABLE_IMAGE_GENERATION,
         'ENABLE_IMAGE_PROMPT_GENERATION': request.app.state.config.ENABLE_IMAGE_PROMPT_GENERATION,
         'IMAGE_GENERATION_ENGINE': request.app.state.config.IMAGE_GENERATION_ENGINE,
-        'IMAGE_GENERATION_MODEL': request.app.state.config.IMAGE_GENERATION_MODEL,
-        'IMAGE_GENERATION_MODEL_FALLBACKS': request.app.state.config.IMAGE_GENERATION_MODEL_FALLBACKS,
+        # The full chain (primary first) is returned as one value, so the UI
+        # shows exactly what will be tried.
+        'IMAGE_GENERATION_MODEL': ','.join(await get_image_model_chain(request)),
         'IMAGE_SIZE': request.app.state.config.IMAGE_SIZE,
         'IMAGE_STEPS': request.app.state.config.IMAGE_STEPS,
         'IMAGES_OPENAI_API_BASE_URL': request.app.state.config.IMAGES_OPENAI_API_BASE_URL,
@@ -598,17 +628,13 @@ async def image_generations(
             if request.app.state.config.IMAGES_OPENAI_API_VERSION:
                 url = f'{url}?api-version={request.app.state.config.IMAGES_OPENAI_API_VERSION}'
 
-            # Model chain: the configured model first, then the fallbacks. The
-            # provider breaks/rotates image models regularly - with a chain the
-            # feature keeps working instead of failing on the first error.
-            fallback_models = [
-                model_id.strip()
-                for model_id in (
-                    request.app.state.config.IMAGE_GENERATION_MODEL_FALLBACKS or ''
-                ).split(',')
-                if model_id.strip()
-            ]
-            model_chain = [model] + [m for m in fallback_models if m and m != model]
+            # Model chain: the configured model(s) first, then the additional
+            # fallbacks. The provider breaks/rotates image models regularly -
+            # with a chain the feature keeps working instead of failing on the
+            # first error.
+            model_chain = await get_image_model_chain(request)
+            if not model_chain:
+                model_chain = [model]
 
             session = await get_session()
             res = None

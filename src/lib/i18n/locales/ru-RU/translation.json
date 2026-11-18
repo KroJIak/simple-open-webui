@@ -2362,5 +2362,7 @@
 	"Youtube Language": "Язык YouTube",
 	"Youtube Proxy URL": "URL прокси для YouTube",
 	"Fallback Models": "Резервные модели",
-	"Comma separated list of models tried in order when the main model fails": "Список моделей через запятую, которые пробуются по очереди, если основная модель не сработала"
+	"Comma separated list of models tried in order when the main model fails": "Список моделей через запятую, которые пробуются по очереди, если основная модель не сработала",
+	"Image Models": "Модели изображений",
+	"One model, or a comma separated chain tried in order": "Одна модель или цепочка через запятую, пробуется по порядку"
 }
