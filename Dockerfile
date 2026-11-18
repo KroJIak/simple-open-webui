@@ -25,6 +25,11 @@ ARG BUILD_HASH
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 ENV CYPRESS_INSTALL_BINARY=0
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+# onnxruntime-node (a transitive dependency of @huggingface/transformers) tries to
+# download CUDA binaries from GitHub on install. Those release assets are not
+# always available and the browser only needs onnxruntime-web (the wasm files
+# are copied into the build), so the node binaries are skipped.
+ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
 
 WORKDIR /app
 
