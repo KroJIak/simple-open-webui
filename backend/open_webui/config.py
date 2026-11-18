@@ -1902,11 +1902,11 @@ IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN = get_env('IMAGE_URL_RESPONSE_MODELS_REG
 IMAGE_SIZE = ConfigVar('IMAGE_SIZE', 'image_generation.size', get_env('IMAGE_SIZE', ''))
 
 # How many images of the chat history are forwarded to the model provider.
-# The provider needs ~1s per full size image it decodes, and every request
-# resends the whole history - a chat with dozens of images therefore exceeds
-# the provider's request timeout (Cloudflare 524). Only the most recent images
-# are sent; the older ones are replaced by a short note. 0 = no limit.
-MAX_IMAGES_PER_REQUEST = int(get_env('MAX_IMAGES_PER_REQUEST', '10') or 10)
+# Every request resends the whole history, so a chat with hundreds of images
+# would exceed the provider's request timeout. The images are downscaled
+# first (MAX_IMAGE_SIDE), which is what makes them cheap for the provider;
+# this limit is only the safety net for pathological chats. 0 = no limit.
+MAX_IMAGES_PER_REQUEST = int(get_env('MAX_IMAGES_PER_REQUEST', '50') or 50)
 
 # Images larger than this are downscaled before they are sent to the provider.
 # The model sees the same picture, but the provider decodes it ~10x faster.

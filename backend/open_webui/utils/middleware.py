@@ -2193,8 +2193,17 @@ def compress_image_data_url(data_url: str) -> str | None:
         if max(width, height) <= MAX_IMAGE_SIDE:
             return None
 
-        image = image.convert('RGB')
         image.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
+
+        # JPEG has no alpha channel - flatten transparency onto white instead
+        # of letting the transparent parts turn black.
+        if image.mode in ('RGBA', 'LA', 'P'):
+            image = image.convert('RGBA')
+            background = Image.new('RGB', image.size, (255, 255, 255))
+            background.paste(image, mask=image.split()[-1])
+            image = background
+        else:
+            image = image.convert('RGB')
 
         buffer = _io.BytesIO()
         image.save(buffer, format='JPEG', quality=IMAGE_COMPRESSION_QUALITY)
