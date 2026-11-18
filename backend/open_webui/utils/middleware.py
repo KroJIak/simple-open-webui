@@ -27,6 +27,8 @@ from open_webui.config import (
     DEFAULT_TOOLS_FUNCTION_CALLING_PROMPT_TEMPLATE,
     DEFAULT_VOICE_MODE_PROMPT_TEMPLATE,
     MAX_IMAGES_PER_REQUEST,
+    MAX_IMAGE_SIDE,
+    IMAGE_COMPRESSION_QUALITY,
 )
 from open_webui.constants import TASKS
 from open_webui.env import (
@@ -2165,6 +2167,44 @@ def limit_images_per_request(form_data):
     return dropped
 
 
+def compress_image_data_url(data_url: str) -> str | None:
+    """Downscale an inline image so the provider can decode it quickly.
+
+    The provider needs roughly 0.4s per full size image, so a chat with many
+    screenshots pushes the request past its request timeout. Resizing keeps the
+    image (and therefore the information for the model) but makes the decoding
+    on the provider side an order of magnitude cheaper.
+    """
+    if not MAX_IMAGE_SIDE:
+        return None
+
+    try:
+        import base64 as _base64
+        import io as _io
+
+        from PIL import Image
+
+        header, _, payload = data_url.partition(',')
+        if not payload:
+            return None
+
+        image = Image.open(_io.BytesIO(_base64.b64decode(payload)))
+        width, height = image.size
+        if max(width, height) <= MAX_IMAGE_SIDE:
+            return None
+
+        image = image.convert('RGB')
+        image.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
+
+        buffer = _io.BytesIO()
+        image.save(buffer, format='JPEG', quality=IMAGE_COMPRESSION_QUALITY)
+        encoded = _base64.b64encode(buffer.getvalue()).decode()
+        return f'data:image/jpeg;base64,{encoded}'
+    except Exception as e:
+        log.debug(f'Error compressing image: {e}')
+        return None
+
+
 async def convert_url_images_to_base64(form_data, user=None):
     messages = form_data.get('messages', [])
 
@@ -2182,16 +2222,26 @@ async def convert_url_images_to_base64(form_data, user=None):
 
             image_url = item.get('image_url', {}).get('url', '')
             if image_url.startswith('data:image/'):
-                new_content.append(item)
+                compressed = await asyncio.to_thread(compress_image_data_url, image_url)
+                if compressed:
+                    new_content.append(
+                        {
+                            'type': 'image_url',
+                            'image_url': {'url': compressed},
+                        }
+                    )
+                else:
+                    new_content.append(item)
                 continue
 
             try:
                 base64_data = await get_image_base64_from_url(image_url, user=user)
                 if base64_data:
+                    compressed = await asyncio.to_thread(compress_image_data_url, base64_data)
                     new_content.append(
                         {
                             'type': 'image_url',
-                            'image_url': {'url': base64_data},
+                            'image_url': {'url': compressed or base64_data},
                         }
                     )
                 else:
