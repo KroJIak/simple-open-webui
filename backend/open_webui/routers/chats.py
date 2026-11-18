@@ -8,7 +8,13 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from open_webui.config import ENABLE_ADMIN_CHAT_ACCESS, ENABLE_ADMIN_EXPORT
+from open_webui.config import (
+    CONTEXT_COMPACTION_BLOCK,
+    CONTEXT_KEEP_RECENT_MESSAGES,
+    CONTEXT_TOKEN_BUDGET,
+    ENABLE_ADMIN_CHAT_ACCESS,
+    ENABLE_ADMIN_EXPORT,
+)
 from open_webui.constants import ERROR_MESSAGES
 from open_webui.internal.db import get_async_session
 from open_webui.models.access_grants import AccessGrants
@@ -33,6 +39,11 @@ from open_webui.socket.main import get_event_emitter
 from open_webui.tasks import stop_item_tasks
 from open_webui.utils.access_control import filter_allowed_access_grants, has_permission
 from open_webui.utils.auth import get_admin_user, get_verified_user
+from open_webui.utils.context import (
+    IMAGE_TOKEN_ESTIMATE,
+    compact_messages,
+    estimate_messages_tokens,
+)
 from open_webui.utils.middleware import serialize_output
 from open_webui.utils.misc import get_message_list
 from pydantic import BaseModel
@@ -954,6 +965,89 @@ async def get_chat_by_id(id: str, user=Depends(get_verified_user), db: AsyncSess
         return ChatResponse(**chat.model_dump())
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND)
+
+
+############################
+# ChatContext
+############################
+
+
+class ChatContextResponse(BaseModel):
+    messages: int
+    images: int
+    tokens: int
+    tokens_last_request: int | None = None
+    budget: int
+    over_budget: bool
+    compacted_messages: int
+
+
+@router.get('/{id}/context', response_model=ChatContextResponse)
+async def get_chat_context(
+    id: str,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """How much of the model context the chat uses.
+
+    The numbers are used by the chat UI to show the user how big the request
+    is going to be, and whether the old part of the history is going to be
+    condensed.
+    """
+    chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
+    if not chat:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND)
+
+    history = chat.chat.get('history') or {}
+    messages_map = history.get('messages') or {}
+    message_list = get_message_list(messages_map, history.get('currentId'))
+
+    images = 0
+    tokens_last_request = None
+    for message in message_list:
+        for file in message.get('files') or []:
+            meta = (file.get('file') or {}).get('meta') or {}
+            if (meta.get('content_type') or '').startswith('image/'):
+                images += 1
+
+        usage = message.get('usage')
+        if isinstance(usage, dict):
+            prompt_tokens = usage.get('prompt_tokens') or usage.get('input_tokens')
+            if prompt_tokens:
+                tokens_last_request = max(tokens_last_request or 0, int(prompt_tokens))
+
+    # The estimation is done on the stored messages - the images are not
+    # decoded, only their amount is taken into account.
+    messages = [
+        {
+            'role': message.get('role'),
+            'content': message.get('content') or '',
+        }
+        for message in message_list
+    ]
+
+    def estimate():
+        tokens = estimate_messages_tokens(messages) + images * IMAGE_TOKEN_ESTIMATE
+        _, info = compact_messages(
+            messages,
+            budget=CONTEXT_TOKEN_BUDGET,
+            block_size=CONTEXT_COMPACTION_BLOCK,
+            keep_recent=CONTEXT_KEEP_RECENT_MESSAGES,
+            tokens_before=tokens,
+        )
+        return tokens, info
+
+    tokens, info = await asyncio.to_thread(estimate)
+
+    return ChatContextResponse(
+        messages=len(message_list),
+        images=images,
+        tokens=tokens,
+        tokens_last_request=tokens_last_request,
+        budget=CONTEXT_TOKEN_BUDGET,
+        over_budget=CONTEXT_TOKEN_BUDGET > 0 and tokens > CONTEXT_TOKEN_BUDGET,
+        compacted_messages=info.get('dropped_messages', 0),
+    )
 
 
 ############################

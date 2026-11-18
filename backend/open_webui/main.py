@@ -549,6 +549,7 @@ from open_webui.utils.chat import (
 from open_webui.utils.chat import (
     generate_chat_completion as chat_completion_handler,
 )
+from open_webui.utils.context import prepare_context_estimator
 from open_webui.utils.embeddings import generate_embeddings
 from open_webui.utils.logger import start_logger
 from open_webui.utils.middleware import (
@@ -642,6 +643,10 @@ async def lifespan(app: FastAPI):
 
     app.state.instance_id = INSTANCE_ID
     start_logger()
+
+    # Load the tokenizer of the context estimation in the background, so that
+    # the first chat request does not have to wait for it.
+    asyncio.create_task(asyncio.to_thread(prepare_context_estimator))
 
     if RESET_CONFIG_ON_START:
         await async_reset_config()

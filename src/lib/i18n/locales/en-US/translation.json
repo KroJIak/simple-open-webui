@@ -2347,5 +2347,13 @@
 	"Fallback Models": "",
 	"Comma separated list of models tried in order when the main model fails": "",
 	"Image Models": "",
-	"One model, or a comma separated chain tried in order": ""
+	"One model, or a comma separated chain tried in order": "",
+	"Context used": "",
+	"Last request": "",
+	"Older messages are condensed": "",
+	"Context: {{used}} of {{budget}} tokens": "",
+	"Last request: {{tokens}} tokens": "",
+	"Messages: {{count}}": "",
+	"Images: {{count}}": "",
+	"Older messages are condensed: {{count}}": ""
 }

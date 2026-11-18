@@ -80,6 +80,7 @@ from open_webui.utils.access_control import has_connection_access, has_permissio
 from open_webui.utils.access_control.files import get_accessible_folder_files
 from open_webui.utils.chat import generate_chat_completion
 from open_webui.utils.code_interpreter import execute_code_jupyter
+from open_webui.utils.context import apply_context_budget
 from open_webui.utils.files import (
     convert_markdown_base64_images,
     get_file_url_from_base64,
@@ -2131,10 +2132,10 @@ def apply_params_to_form_data(form_data, model):
 def limit_images_per_request(form_data):
     """Keep only the most recent images of the chat history.
 
-    Every request resends the whole history, and the provider needs 1-2s per
-    image it decodes. A chat with dozens of images therefore blows past the
-    provider's request timeout (Cloudflare 524) even though the text context
-    alone is handled fine. The images that are dropped are replaced by a short
+    Every request resends the whole history, and every image costs the
+    provider time to decode. The images are downscaled before they are sent
+    (see compress_image_data_url), this limit is only the safety net for
+    pathological chats. The images that are dropped are replaced by a short
     note, so the model still knows that an image was there.
     """
     max_images = MAX_IMAGES_PER_REQUEST
@@ -2170,10 +2171,11 @@ def limit_images_per_request(form_data):
 def compress_image_data_url(data_url: str) -> str | None:
     """Downscale an inline image so the provider can decode it quickly.
 
-    The provider needs roughly 0.4s per full size image, so a chat with many
-    screenshots pushes the request past its request timeout. Resizing keeps the
-    image (and therefore the information for the model) but makes the decoding
-    on the provider side an order of magnitude cheaper.
+    The provider needs roughly 1.3s per full size image (up to 800k pixels),
+    so a chat with many screenshots pushes the request past its request
+    timeout. Resizing keeps the image (and therefore the information for the
+    model) but makes the decoding on the provider side an order of magnitude
+    cheaper - a 512px JPEG is decoded in a fraction of the time.
     """
     if not MAX_IMAGE_SIDE:
         return None
@@ -2511,6 +2513,16 @@ async def process_chat_payload(request, form_data, user, metadata, model):
         form_data.get('messages', []),
         reasoning_format=get_reasoning_format(model),
     )
+
+    # Keep the request within the context budget - the oldest part of a long
+    # history is condensed into a short digest. Direct API clients get the
+    # history they sent, unchanged.
+    if not getattr(request.state, 'direct', False):
+        form_data['messages'], context_info = await asyncio.to_thread(
+            apply_context_budget, form_data.get('messages', [])
+        )
+        if context_info.get('compacted'):
+            metadata['context'] = context_info
 
     system_message = get_system_message(form_data.get('messages', []))
     if system_message:  # Chat Controls/User Settings

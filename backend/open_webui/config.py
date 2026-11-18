@@ -1916,6 +1916,25 @@ MAX_IMAGE_SIDE = int(get_env('MAX_IMAGE_SIDE', '512') or 0)
 # JPEG quality used for the resized images.
 IMAGE_COMPRESSION_QUALITY = int(get_env('IMAGE_COMPRESSION_QUALITY', '60') or 60)
 
+# Token budget of a chat request. Every request resends the whole history, so
+# a long chat gets slower and more expensive with every message. When the
+# history exceeds the budget, the oldest messages are condensed into a short
+# digest. 0 = no limit.
+CONTEXT_TOKEN_BUDGET = int(get_env('CONTEXT_TOKEN_BUDGET', '100000') or 0)
+
+# The condensation happens in blocks of this many messages, so that the
+# condensed prefix only changes every few messages and the prompt cache of
+# the provider stays valid.
+CONTEXT_COMPACTION_BLOCK = int(get_env('CONTEXT_COMPACTION_BLOCK', '20') or 20)
+
+# The newest messages are never condensed away.
+CONTEXT_KEEP_RECENT_MESSAGES = int(get_env('CONTEXT_KEEP_RECENT_MESSAGES', '20') or 20)
+
+# The token estimate is based on tiktoken, but the providers count with their
+# own tokenizer. This factor calibrates the estimate against the accounting of
+# the provider (1.0 = use the raw tiktoken estimate).
+CONTEXT_TOKEN_ESTIMATE_FACTOR = float(get_env('CONTEXT_TOKEN_ESTIMATE_FACTOR', '0.8') or 0.8)
+
 IMAGE_STEPS = ConfigVar('IMAGE_STEPS', 'image_generation.steps', int(get_env('IMAGE_STEPS', 50)))
 
 ENABLE_IMAGE_PROMPT_GENERATION = ConfigVar(

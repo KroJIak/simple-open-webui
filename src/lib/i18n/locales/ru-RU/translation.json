@@ -2364,5 +2364,13 @@
 	"Fallback Models": "Резервные модели",
 	"Comma separated list of models tried in order when the main model fails": "Список моделей через запятую, которые пробуются по очереди, если основная модель не сработала",
 	"Image Models": "Модели изображений",
-	"One model, or a comma separated chain tried in order": "Одна модель или цепочка через запятую, пробуется по порядку"
+	"One model, or a comma separated chain tried in order": "Одна модель или цепочка через запятую, пробуется по порядку",
+	"Context used": "Контекст занят",
+	"Last request": "Последний запрос",
+	"Older messages are condensed": "Старые сообщения свёрнуты",
+	"Context: {{used}} of {{budget}} tokens": "Контекст: {{used}} из {{budget}} токенов",
+	"Last request: {{tokens}} tokens": "Последний запрос: {{tokens}} токенов",
+	"Messages: {{count}}": "Сообщений: {{count}}",
+	"Images: {{count}}": "Изображений: {{count}}",
+	"Older messages are condensed: {{count}}": "Старые сообщения свёрнуты: {{count}}"
 }
