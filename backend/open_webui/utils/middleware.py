@@ -26,6 +26,7 @@ from open_webui.config import (
     DEFAULT_CODE_INTERPRETER_PROMPT,
     DEFAULT_TOOLS_FUNCTION_CALLING_PROMPT_TEMPLATE,
     DEFAULT_VOICE_MODE_PROMPT_TEMPLATE,
+    MAX_IMAGES_PER_REQUEST,
 )
 from open_webui.constants import TASKS
 from open_webui.env import (
@@ -2125,6 +2126,45 @@ def apply_params_to_form_data(form_data, model):
     return form_data
 
 
+def limit_images_per_request(form_data):
+    """Keep only the most recent images of the chat history.
+
+    Every request resends the whole history, and the provider needs 1-2s per
+    image it decodes. A chat with dozens of images therefore blows past the
+    provider's request timeout (Cloudflare 524) even though the text context
+    alone is handled fine. The images that are dropped are replaced by a short
+    note, so the model still knows that an image was there.
+    """
+    max_images = MAX_IMAGES_PER_REQUEST
+    if not max_images or max_images < 0:
+        return 0
+
+    messages = form_data.get('messages', [])
+    positions = []
+    for message_index, message in enumerate(messages):
+        content = message.get('content')
+        if not isinstance(content, list):
+            continue
+        for part_index, item in enumerate(content):
+            if isinstance(item, dict) and item.get('type') == 'image_url':
+                positions.append((message_index, part_index))
+
+    if len(positions) <= max_images:
+        return 0
+
+    dropped = 0
+    for message_index, part_index in positions[:-max_images]:
+        content = messages[message_index]['content']
+        content[part_index] = {
+            'type': 'text',
+            'text': '[earlier image omitted - too many images for one request]',
+        }
+        dropped += 1
+
+    log.info(f'Images per request limited to {max_images}, dropped {dropped} older images')
+    return dropped
+
+
 async def convert_url_images_to_base64(form_data, user=None):
     messages = form_data.get('messages', [])
 
@@ -2423,6 +2463,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
             pass
 
     form_data = await convert_url_images_to_base64(form_data, user=user)
+    limit_images_per_request(form_data)
 
     event_emitter = await get_event_emitter(metadata)
     event_caller = await get_event_call(metadata)
