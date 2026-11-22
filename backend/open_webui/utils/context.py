@@ -282,7 +282,7 @@ def compact_messages(
         'tokens_after': 0,
     }
 
-    if not budget or budget <= 0 or len(messages) <= keep_recent:
+    if not budget or budget <= 0:
         info['tokens_after'] = info['tokens_before']
         return messages, info
 
@@ -337,12 +337,19 @@ def compact_messages(
     if digest:
         kept = [{'role': 'user', 'content': digest}, *kept]
 
+    result = messages[:head] + kept
+
+    # A chat with few but huge messages cannot be condensed by dropping them
+    # (there is nothing to drop) - the oldest ones are cut instead.
+    truncated = truncate_to_budget(result, budget, keep_recent=keep_recent)
+
     info.update(
         {
             'compacted': True,
             'dropped_messages': dropped_count,
-            'dropped_tokens': info['tokens_before'] - estimate_messages_tokens(kept),
-            'tokens_after': estimate_messages_tokens(kept),
+            'dropped_tokens': info['tokens_before'] - estimate_messages_tokens(truncated),
+            'tokens_after': estimate_messages_tokens(truncated),
+            'truncated_messages': truncated,
         }
     )
     log.info(
@@ -350,7 +357,110 @@ def compact_messages(
         f'({info["tokens_before"]} -> {info["tokens_after"]} tokens)'
     )
 
-    return messages[:head] + kept, info
+    return truncated, info
+
+
+def _cut_message(message: dict) -> None:
+    """Cut the content of a message in half (at least 400 characters stay)."""
+    content = message.get('content')
+
+    if isinstance(content, str):
+        text = content
+        while len(text) > 400:
+            text = text[: max(400, len(text) // 2)]
+            message['content'] = (
+                f'{text}\n\n[... the middle of this message was removed '
+                'to fit the context budget ...]'
+            )
+            if len(text) <= 400:
+                break
+    elif isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, dict) and part.get('type') == 'text':
+                text = part.get('text', '')
+                if len(text) > 400:
+                    part = {
+                        **part,
+                        'text': f'{text[:200]}\n\n[... removed to fit the context budget ...]',
+                    }
+            parts.append(part)
+        message['content'] = parts
+
+
+def truncate_to_budget(
+    messages: list[dict],
+    budget: int,
+    keep_recent: int = 20,
+) -> list[dict]:
+    """Cut the content of the oldest messages until the request fits.
+
+    Only used when there are not enough messages to drop - a chat with a few
+    huge messages (a big file, a long knowledge base excerpt) would otherwise
+    stay above the budget. The oldest messages are cut first, the newest ones
+    are the last resort.
+    """
+    if not budget or budget <= 0:
+        return messages
+
+    if estimate_messages_tokens(messages) <= budget:
+        return messages
+
+    result = [dict(message) for message in messages]
+
+    for index in range(len(result)):
+        if estimate_messages_tokens(result) <= budget:
+            break
+        _cut_message(result[index])
+
+    return result
+
+
+def shrink_context(form_data: dict, factor: float) -> dict | None:
+    """Compact the messages of a request even harder.
+
+    Used when the provider rejected the request: the context is condensed
+    again with a smaller budget and the request is repeated.
+    """
+    from open_webui.config import (
+        CONTEXT_COMPACTION_BLOCK,
+        CONTEXT_KEEP_RECENT_MESSAGES,
+        CONTEXT_TOKEN_BUDGET,
+    )
+
+    budget = int(CONTEXT_TOKEN_BUDGET * factor)
+    if budget <= 0:
+        return None
+
+    messages = form_data.get('messages') or []
+    if not messages:
+        return None
+
+    compacted, info = compact_messages(
+        messages,
+        budget=budget,
+        block_size=CONTEXT_COMPACTION_BLOCK,
+        keep_recent=CONTEXT_KEEP_RECENT_MESSAGES,
+    )
+
+    if info.get('compacted'):
+        log.info(
+            f'Retrying the request with a smaller context: '
+            f'{info.get("tokens_before")} -> {info.get("tokens_after")} tokens'
+        )
+        return {**form_data, 'messages': compacted}
+
+    # Nothing could be dropped - cut the content of the oldest messages.
+    truncated = truncate_to_budget(
+        messages, budget, keep_recent=CONTEXT_KEEP_RECENT_MESSAGES
+    )
+    before = estimate_messages_tokens(messages)
+    after = estimate_messages_tokens(truncated)
+    if after >= before:
+        return None
+
+    log.info(f'Retrying the request with a trimmed context: {before} -> {after} tokens')
+    return {**form_data, 'messages': truncated}
 
 
 def prepare_context_estimator() -> None:

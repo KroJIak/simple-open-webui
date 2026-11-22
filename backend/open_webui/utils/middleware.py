@@ -2518,11 +2518,15 @@ async def process_chat_payload(request, form_data, user, metadata, model):
     # history is condensed into a short digest. Direct API clients get the
     # history they sent, unchanged.
     if not getattr(request.state, 'direct', False):
+        original_messages = form_data.get('messages', [])
         form_data['messages'], context_info = await asyncio.to_thread(
-            apply_context_budget, form_data.get('messages', [])
+            apply_context_budget, original_messages
         )
         if context_info.get('compacted'):
             metadata['context'] = context_info
+            # Kept for the retry: if the provider rejects the request, the
+            # context is condensed even harder and the request is repeated.
+            request.state.context_messages = original_messages
 
     system_message = get_system_message(form_data.get('messages', []))
     if system_message:  # Chat Controls/User Settings

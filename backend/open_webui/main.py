@@ -549,7 +549,7 @@ from open_webui.utils.chat import (
 from open_webui.utils.chat import (
     generate_chat_completion as chat_completion_handler,
 )
-from open_webui.utils.context import prepare_context_estimator
+from open_webui.utils.context import prepare_context_estimator, shrink_context
 from open_webui.utils.embeddings import generate_embeddings
 from open_webui.utils.logger import start_logger
 from open_webui.utils.middleware import (
@@ -1599,6 +1599,38 @@ async def unload_model(request: Request, form_data: ModelUnloadForm, user=Depend
 ##################################
 
 
+def provider_error_detail(response: JSONResponse) -> str:
+    """The message of an error response of the model provider."""
+    try:
+        error_body = json.loads(response.body.decode('utf-8', 'replace'))
+        detail = error_body.get('error', error_body) if isinstance(error_body, dict) else error_body
+        if isinstance(detail, dict):
+            detail = detail.get('message', detail.get('detail', str(detail)))
+        return str(detail)
+    except Exception:
+        return f'Provider returned HTTP {response.status_code}'
+
+
+def is_content_policy_error(detail: str) -> bool:
+    """Whether the provider refused the request because of its content policy.
+
+    Such a request must not be repeated with a shortened history - the content
+    itself is the problem.
+    """
+    markers = (
+        'content policy',
+        'content filter',
+        'content_filter',
+        'safety',
+        'moderation',
+        'blocked by',
+        'prohibited content',
+        'violat',
+    )
+    lowered = (detail or '').lower()
+    return any(marker in lowered for marker in markers)
+
+
 @app.post('/api/embeddings')
 @app.post('/api/v1/embeddings')  # Experimental: Compatibility with OpenAI API
 async def embeddings(request: Request, form_data: dict, user=Depends(get_verified_user)):
@@ -2028,19 +2060,49 @@ async def chat_completion(
 
             response = await chat_completion_handler(request, form_data, user)
 
+            # The provider can reject a request that is too big for it. Instead
+            # of showing an error, the context is condensed even harder and the
+            # request is repeated - a long chat stays usable.
+            if (
+                isinstance(response, JSONResponse)
+                and response.status_code == 400
+                and not getattr(request.state, 'direct', False)
+                and not is_content_policy_error(provider_error_detail(response))
+            ):
+                original_messages = getattr(request.state, 'context_messages', None)
+                for factor in (0.5, 0.25):
+                    base = (
+                        {**form_data, 'messages': original_messages}
+                        if original_messages
+                        else form_data
+                    )
+                    shrunk = shrink_context(base, factor)
+                    if shrunk is None:
+                        break
+
+                    response = await chat_completion_handler(request, shrunk, user)
+                    if not (isinstance(response, JSONResponse) and response.status_code >= 400):
+                        form_data = shrunk
+                        break
+
             # When the upstream provider returns an error (e.g. HTTP 400
             # content-filter, quota exceeded), generate_chat_completion
             # returns a JSONResponse instead of raising.  Detect this and
             # raise so the except-block below emits chat:message:error +
             # chat:tasks:cancel, unblocking the frontend.
             if isinstance(response, JSONResponse) and response.status_code >= 400:
-                try:
-                    error_body = json.loads(response.body.decode('utf-8', 'replace'))
-                    detail = error_body.get('error', error_body) if isinstance(error_body, dict) else error_body
-                    if isinstance(detail, dict):
-                        detail = detail.get('message', detail.get('detail', str(detail)))
-                except Exception:
-                    detail = f'Provider returned HTTP {response.status_code}'
+                detail = provider_error_detail(response)
+
+                # The provider could not handle the request even with a
+                # condensed context - tell the user what to do instead of
+                # showing the raw message of the provider.
+                if response.status_code == 400 and metadata.get('context'):
+                    detail = (
+                        'The chat is too large for the model: even the condensed '
+                        'context was rejected. Start a new chat and continue '
+                        'there, or remove the largest attachments.'
+                    )
+
                 raise Exception(detail)
 
             ctx = await build_chat_response_context(request, form_data, user, model, metadata, tasks, events)

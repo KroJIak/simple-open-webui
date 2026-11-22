@@ -7,6 +7,8 @@ from open_webui.utils.context import (
     estimate_content_tokens,
     estimate_messages_tokens,
     estimate_text_tokens,
+    shrink_context,
+    truncate_to_budget,
 )
 
 TINY_PNG = (
@@ -145,6 +147,51 @@ class ContextCompactionTests(unittest.TestCase):
 
         self.assertIn('теории вероятностей', digest)
         self.assertIn('The user asked about:', digest)
+
+
+class ContextTruncationTests(unittest.TestCase):
+    def test_a_single_huge_message_is_cut(self):
+        messages = [message('user', 'текст ' * 50000)]
+
+        compacted, info = compact_messages(messages, budget=5000, block_size=20, keep_recent=20)
+
+        self.assertTrue(info['compacted'])
+        self.assertLess(info['tokens_after'], info['tokens_before'])
+        text = ' '.join(
+            part.get('text', '')
+            for part in compacted[0]['content']
+            if isinstance(part, dict)
+        )
+        self.assertIn('removed to fit the context budget', text)
+
+    def test_the_newest_messages_are_not_cut(self):
+        messages = [message('user', 'старое ' * 50000), message('user', 'новое')]
+
+        compacted, _ = compact_messages(messages, budget=5000, block_size=20, keep_recent=1)
+
+        self.assertEqual(compacted[-1]['content'], [{'type': 'text', 'text': 'новое'}])
+
+    def test_truncate_keeps_the_request_within_the_budget(self):
+        messages = [message('user', 'текст ' * 20000) for _ in range(5)]
+
+        truncated = truncate_to_budget(messages, budget=2000, keep_recent=1)
+
+        self.assertLessEqual(estimate_messages_tokens(truncated), 2000)
+
+    def test_shrink_context_makes_the_request_smaller(self):
+        messages = [
+            message('user', f'вопрос номер {i} ' + 'разные слова про вероятность ' * 200)
+            for i in range(50)
+        ]
+        form_data = {'model': 'test', 'messages': messages}
+
+        shrunk = shrink_context(form_data, 0.25)
+
+        self.assertIsNotNone(shrunk)
+        self.assertLess(
+            estimate_messages_tokens(shrunk['messages']),
+            estimate_messages_tokens(messages),
+        )
 
 
 if __name__ == '__main__':
